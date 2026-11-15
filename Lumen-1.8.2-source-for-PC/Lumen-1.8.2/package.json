@@ -1,0 +1,71 @@
+{
+  "name": "lumen-lights",
+  "productName": "Lumen",
+  "version": "1.8.2",
+  "description": "One dark-mode control center for WiZ, GE Cync and Hubspace smart lights",
+  "main": "src/main/main.js",
+  "author": "Lumen",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/run.js && node test/show.js && node test/effects.js && node test/av.js",
+    "test:ui": "node test/ui.js && node test/studio.js",
+    "dist": "electron-builder --win --x64",
+    "dist:mac": "electron-builder --mac --x64 --arm64"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.lumen.lights",
+    "productName": "Lumen",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signAndEditExecutable": false,
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "Lumen-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Lumen-Portable-${version}.${ext}"
+    },
+    "mac": {
+      "category": "public.app-category.lifestyle",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "Lumen-mac-${arch}-${version}.${ext}",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Lumen listens to audio only to measure loudness for music-reactive lighting.",
+        "NSAudioCaptureUsageDescription": "Lumen measures system sound loudness for music-reactive lighting. Nothing is recorded or sent anywhere.",
+        "NSCameraUsageDescription": "Lumen can use the camera to calibrate light timing. Nothing is recorded or sent anywhere.",
+        "NSLocalNetworkUsageDescription": "Lumen talks to smart lights on your local network."
+      }
+    },
+    "dmg": {
+      "artifactName": "Lumen-${version}-${arch}.${ext}"
+    }
+  }
+}
