@@ -4,7 +4,7 @@
    the lights are driven separately in the main process, so a slow bulb can never slow the picture down. */
 const PJ = window.LumenProj;
 const pj = { list: null, cur: null, sel: null, tab: 'visuals', undo: [], canvas: null, R: null, timer: null, n: 0, running: false, add: null, drag: null,
-  cap: null, feat: null, displays: [], display: '', out: { open: false }, thumbs: {}, thumbBusy: false, dom: null, regional: {}, sent: {}, err: '', sample: null, lastTargets: {},
+  cap: null, feat: null, displays: [], display: '', platform: '', out: { open: false }, thumbs: {}, thumbBusy: false, dom: null, regional: {}, sent: {}, err: '', sample: null, lastTargets: {},
   // 1.7 audiovisual engine
   eng: null, dir: null, sched: null, ov: {}, live: null, rf: null, beatLatch: false, dropLatch: false, shownBeat: 0, cuedBeat: 0, lat: [], thumbCol: {}, next: null, last: null, adv: false, calib: null, sync: {}, fakeF: null };
 const PJD = window.LumenDirector, PJF = window.LumenFeatures, PJS = window.LumenSched;
@@ -15,6 +15,8 @@ const pjActiveIds = () => pjLights().map((d) => d.id).filter((id) => !pj.cur.lig
 /* ---------- data ---------- */
 async function pjInit() {
   pj.list = (await call('proj:list')).map(PJ.project);
+  const appInfo = await call('app:info');
+  pj.platform = /\|\s*darwin\b/i.test(appInfo.runtime || '') ? 'darwin' : 'other';
   pj.cur = pj.list[0] || PJ.project({ name: 'My room', regions: PJ.STARTERS[0].regions });
   pj.sel = pj.cur.regions[0] ? pj.cur.regions[0].id : null;
   pj.displays = await call('proj:displays'); const ext = pj.displays.find((d) => !d.primary); pj.display = (ext || pj.displays[0] || {}).id || '';
@@ -94,7 +96,19 @@ Object.defineProperties(pj, {
   eng: { get: () => SVC.engine },
   feat: { get: () => SVC.features },
 });
-async function pjAudioStart() { await SVC.start({ source: pj.cur.audio.source === 'mic' ? 'mic' : 'system' }); }
+async function pjAudioStart() {
+  const requested = pj.cur.audio.source === 'mic' ? 'mic' : 'system';
+  try { await SVC.start({ source: requested }); }
+  catch (e) {
+    const source = LumenProjAudio.fallbackSource(pj.platform, requested, e);
+    if (source === requested) throw e;
+    pj.cur.audio.source = source;
+    pj.err = 'macOS did not provide system sound, so Projection Studio switched to the microphone.';
+    await SVC.start({ source });
+    pjSave();
+    pjPanel();
+  }
+}
 function pjAudioStop() { SVC.stop(); }
 const pjAudioWanted = () => SVC.wanted || SVC.state === 'requesting';
 // Each analysis frame (from the service's own timer, 40 Hz), whatever page or tab is showing.
@@ -204,12 +218,12 @@ function pjPanel() {
         ${r ? `<label class="pj-link" data-tip="This bulb takes the colour inside “${esc(r.name)}” instead of the whole picture"><input type="checkbox" data-link="${esc(d.id)}" ${r.lights.includes(d.id) ? 'checked' : ''}>follows shape</label>` : ''}</div>`).join('')}</div>
         <p class="muted pj-p">WiZ follows about 11 times a second. Cync and Hubspace go through their clouds, so they follow more slowly and smoothly. White-only bulbs follow with brightness and warmth, not colour.</p>` : '<div class="note"><span>No lights are available. Find or connect lights first.</span></div>'}`;
   } else {
-    el.innerHTML = `<div class="sect">Music response</div><div class="f"><label>Listen to</label><select data-k="A.source"><option value="system" ${A.source === 'system' ? 'selected' : ''}>What this PC is playing</option><option value="mic" ${A.source === 'mic' ? 'selected' : ''}>Microphone</option></select></div>
+    el.innerHTML = `<div class="sect">Music response</div><div class="f"><label>Listen to</label><select data-k="A.source"><option value="system" ${A.source === 'system' ? 'selected' : ''}>${pj.platform === 'darwin' ? 'System sound (microphone fallback)' : 'What this PC is playing'}</option><option value="mic" ${A.source === 'mic' ? 'selected' : ''}>Microphone</option></select></div>
       <div class="row pj-wrap">${[['subtle', 'Subtle'], ['balanced', 'Balanced'], ['intense', 'Intense']].map(([k, n]) => `<button class="btn ${A.style === k ? 'on' : ''}" data-style="${k}">${n}</button>`).join('')}</div>
       ${pjSlider('Sensitivity', 'A.sensitivity', 0.3, 3, 0.1, A.sensitivity, '×')}
       <div class="row"><button class="btn pri" id="pjListenBtn" data-a="${SVC.wanted ? 'unlisten' : 'listen'}">${SVC.wanted ? 'Stop listening' : SVC.state === 'error' ? 'Try again' : 'Start listening'}</button><i class="led" id="pjBeat" data-tip="Beat"></i></div><div class="pj-astate" id="pjAudioState"></div>
       <div class="pj-meters"><span>Level</span><div class="vu"><i id="pjVu" style="width:0"></i></div><span>Bass</span><div class="vu"><i id="pjB-bass" style="width:0"></i></div><span>Mids</span><div class="vu"><i id="pjB-mid" style="width:0"></i></div><span>Treble</span><div class="vu"><i id="pjB-treble" style="width:0"></i></div></div>
-      <p class="muted pj-p">Listening carries on while you change animations, settings, tabs or pages; it stops only when you press Stop listening. If the sound source drops out (for example the audio device changes), Lumen reconnects by itself. Sound is only measured, never recorded or sent anywhere. To make the bulbs follow the music too, choose Music Sync or Immersive on the Lights tab.</p>
+      <p class="muted pj-p">${pj.platform === 'darwin' ? 'macOS does not provide system sound capture here; choosing System sound switches to the microphone if no system track is available.' : 'Listening carries on while you change animations, settings, tabs or pages; it stops only when you press Stop listening.'} If the sound source drops out (for example the audio device changes), Lumen reconnects by itself. Sound is only measured, never recorded or sent anywhere. To make the bulbs follow the music too, choose Music Sync or Immersive on the Lights tab.</p>
       ${r ? `<div class="sect">How “${esc(r.name)}” reacts</div>${pjSlider('Amount', 'react', 0, 1, 0.05, r.react)}<div class="f"><label>Reacts to</label><select data-k="band">${[['bass', 'Bass'], ['mid', 'Mids'], ['treble', 'Treble'], ['level', 'Overall level']].map(([k, n]) => `<option value="${k}" ${r.band === k ? 'selected' : ''}>${n}</option>`).join('')}</select></div>` : none}`;
     pjAudioState();
   }

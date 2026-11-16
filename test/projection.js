@@ -4,11 +4,37 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const vm = require('vm');
 const PJ = require('../src/shared/proj-core');
+const PJA = require('../src/shared/proj-audio');
 const { createApi } = require('../src/main/api');
 const { ProjLights } = require('../src/main/projlights');
 
 async function main() {
+  // Verify every animation in the picker has a matching shader and is placed in exactly one picker group.
+  const renderWindow = {
+    LumenProj: PJ,
+    LumenColor: require('../src/shared/color'),
+    LumenEvolve: require('../src/shared/av-evolve'),
+    LumenDirector: require('../src/shared/av-director'),
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/shared/proj-render.js'), 'utf8'), { window: renderWindow, console });
+  const grouped = PJ.GROUPS.flatMap((g) => g[1]);
+  assert.strictEqual(grouped.length, PJ.PRESET_IDS.length, 'each animation appears in a picker group');
+  assert.strictEqual(new Set(grouped).size, PJ.PRESET_IDS.length, 'picker groups contain no duplicate animations');
+  assert(PJ.PRESET_IDS.every((id) => renderWindow.PROJ_FX.includes(id)), 'every picker animation has a renderer shader');
+
+  // All scripts referenced by either page must exist in the packaged source tree.
+  for (const page of ['src/renderer/index.html', 'src/renderer/projector.html']) {
+    const html = fs.readFileSync(path.join(__dirname, '..', page), 'utf8');
+    for (const [, src] of html.matchAll(/<script[^>]+src="([^"]+)"/g)) assert(fs.existsSync(path.resolve(path.dirname(path.join(__dirname, '..', page)), src)), `${page} script exists: ${src}`);
+  }
+
+  assert.strictEqual(PJA.fallbackSource('darwin', 'system', { noTrack: true }), 'mic', 'macOS system capture falls back when no audio track is supplied');
+  assert.strictEqual(PJA.fallbackSource('darwin', 'system', { refused: true }), 'system', 'permission refusal is not silently rerouted');
+  assert.strictEqual(PJA.fallbackSource('win32', 'system', { noTrack: true }), 'system', 'Windows source selection is unchanged');
+  assert.strictEqual(PJA.fallbackSource('darwin', 'mic', { noTrack: true }), 'mic', 'an explicitly selected microphone stays selected');
+
   // Exercise the same API used by the renderer, including normalization and saved shape settings.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumen-projection-'));
   const data = { settings: {}, devices: {}, rooms: [], groups: [], scenes: [], layouts: [], schedules: [], projections: [] };

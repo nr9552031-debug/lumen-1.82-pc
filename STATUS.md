@@ -2,6 +2,12 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (Projection Studio follow-up)
+- Fixed the macOS Projection Studio audio path: the Audio tab now identifies system audio as unavailable on Mac and automatically switches to Microphone when macOS supplies no system audio track. The fallback decision is covered for Mac, Windows, explicit microphone selection, and permission refusal in `test/projection.js`.
+- `node test/projection.js`, syntax checks, and `git diff --check` pass. Full `npm test` still stops at the WiZ fixture bind error; real microphone permission/capture on Mac remains unverified.
+- Installed locked dependencies with `npm ci`; `npm start` then aborted with `SIGABRT` before the Studio UI became inspectable. `node test/projection.js` now also checks all 35 picker animations have shaders, every animation appears exactly once, and both page script references resolve.
+- Next: continue mapping, per-shape, Play/Stop and output lifecycle review; keep real projector/bulb and Windows/macOS checks explicit.
+
 ### 2026-11-15 Codex
 - Started the Projection Studio end-to-end audit. Confirmed all editor/projector script references resolve, the preload bridges and IPC channel names line up, and the audited JavaScript files pass `node --check`.
 - Fixed a bulb restore defect: a bulb dropped after repeated provider failures now stays in the saved pre-show snapshot. `node test/projection.js` passed its project round-trip and dropped-bulb restoration checks.
@@ -20,8 +26,9 @@ Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else
 
 ## Build / test state
 - VERIFIED (local, 2026-11-15): `node test/projection.js` passed the saved-project normalization/round-trip and restore-after-provider-failure checks.
+- VERIFIED (local, 2026-11-15): `node test/projection.js` passed the platform fallback policy checks for macOS no-track fallback, Windows unchanged behavior, explicit microphone selection, and permission refusal.
 - UNVERIFIED: the full `npm test` suite cannot complete on this host. Its projection test passes, but the WiZ fixture cannot bind `127.0.0.70:38899` (`EPERM` in the sandbox and `EADDRNOTAVAIL` outside it).
-- UNVERIFIED: app launch; `npm start` reports `electron: command not found` because dependencies are not installed in this checkout.
+- UNVERIFIED: app launch; after `npm ci`, `npm start` exits with `SIGABRT` before the Studio UI is visible. The stack trace did not identify the cause.
 - VERIFIED (GitHub Actions run on main, commit 0e06276): the 3 WiZ simulated-bulb tests (wiz-caps, wiz-errors, wiz-multi) pass on Windows, macOS and Linux.
 - VERIFIED (same run): `npm run dist` and `npm run dist:mac` both produced artifacts (Windows installer + portable exe; Mac arm64/x64 dmg + zip), published to the `latest` release.
 - UNVERIFIED: that either built app launches and runs. The owner has not yet tried them.
@@ -29,6 +36,6 @@ Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else
 
 ## Gaps found
 - Projection Studio has not yet had a full interactive run. Multi-display/fullscreen behavior, Esc close, WebGL rendering, and real bulb state restoration still need hands-on verification.
-- Projection Studio's Audio tab offers system capture on Mac even though the app's capture handler only provides loopback audio on Windows; the Mac system source yields no audio track and requires choosing Microphone manually.
+- macOS still does not provide system sound capture. Projection Studio now switches to Microphone if its system source produces no audio track; actual microphone capture and permission handling need a real-Mac check. Effects still requires the user to choose Microphone manually.
 - test/run.js, show.js, effects.js, av.js, ui.js, studio.js (previously run by `npm test`) are missing from this repo. An older copy of some (run.js, show.js, ui.js, shot.js) exists in the zip in the `lumennnnnnnnnnnn` repo (older source; must be checked against current code before use).
 - Mac system-sound capture is not implemented (Windows-only loopback).
