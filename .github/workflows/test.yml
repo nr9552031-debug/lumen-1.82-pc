@@ -1,9 +1,7 @@
 name: test
-# Runs the same tests on Windows and macOS (plus Linux) so a change can't break one platform silently.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 jobs:
   test:
     strategy:
@@ -11,15 +9,11 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: Lumen-1.8.2-source-for-PC/Lumen-1.8.2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: Lumen-1.8.2-source-for-PC/Lumen-1.8.2/package-lock.json
       - run: npm ci
       - run: npm test

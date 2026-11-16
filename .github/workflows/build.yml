@@ -1,33 +1,33 @@
 name: build
-# Builds the Windows installer + portable exe and the Mac dmg/zip. Run it from the Actions tab (Run workflow),
-# or push a tag like v1.8.3. Download the files from the run's "Artifacts" section.
+# On every push to main: test on Windows/Mac/Linux, build the PC and Mac apps, and publish both to the "latest" release.
 on:
-  workflow_dispatch:
   push:
-    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
   build:
+    needs: test
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
             script: dist
-            name: Lumen-Windows
+            name: Lumen-PC
           - os: macos-latest
             script: dist:mac
             name: Lumen-Mac
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: Lumen-1.8.2-source-for-PC/Lumen-1.8.2
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: Lumen-1.8.2-source-for-PC/Lumen-1.8.2/package-lock.json
       - run: npm ci
       - name: Make Mac icon
         if: runner.os == 'macOS'
@@ -39,7 +39,24 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: |
-            Lumen-1.8.2-source-for-PC/Lumen-1.8.2/dist/*.exe
-            Lumen-1.8.2-source-for-PC/Lumen-1.8.2/dist/*.dmg
-            Lumen-1.8.2-source-for-PC/Lumen-1.8.2/dist/*.zip
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
           if-no-files-found: error
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publish to the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest out/* --target "${{ github.sha }}" --prerelease \
+            --title "Latest build (PC + Mac)" \
+            --notes "Auto-built from commit ${{ github.sha }}. PC: Lumen-Setup / Lumen-Portable .exe. Mac: .dmg (Apple Silicon and Intel). Mac build is unsigned: right-click the app and choose Open the first time."
