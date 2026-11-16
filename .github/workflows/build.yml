@@ -18,7 +18,7 @@ jobs:
           - os: windows-latest
             script: dist
             name: Lumen-PC
-          - os: macos-15-intel
+          - os: macos-15
             script: dist:mac
             name: Lumen-Mac
     runs-on: ${{ matrix.os }}
