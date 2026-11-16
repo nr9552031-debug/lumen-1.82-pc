@@ -4,7 +4,7 @@
    the lights are driven separately in the main process, so a slow bulb can never slow the picture down. */
 const PJ = window.LumenProj;
 const pj = { list: null, cur: null, sel: null, tab: 'visuals', undo: [], canvas: null, R: null, timer: null, n: 0, running: false, add: null, drag: null,
-  cap: null, feat: null, displays: [], display: '', platform: '', out: { open: false }, thumbs: {}, thumbBusy: false, dom: null, regional: {}, sent: {}, err: '', sample: null, lastTargets: {},
+  cap: null, feat: null, displays: [], display: '', platform: '', out: { open: false }, thumbs: {}, thumbBusy: false, dom: null, regional: {}, sent: {}, restoreFailed: [], err: '', sample: null, lastTargets: {},
   // 1.7 audiovisual engine
   eng: null, dir: null, sched: null, ov: {}, live: null, rf: null, beatLatch: false, dropLatch: false, shownBeat: 0, cuedBeat: 0, lat: [], thumbCol: {}, next: null, last: null, adv: false, calib: null, sync: {}, fakeF: null };
 const PJD = window.LumenDirector, PJF = window.LumenFeatures, PJS = window.LumenSched;
@@ -88,7 +88,7 @@ function pjSample() {
 }
 async function pjPollStatus() {
   const r = await window.lumen.call('proj:status'); if (!r.ok) return;
-  pj.sent = r.data.lights.sent; pj.dropped = r.data.lights.dropped; pj.sync = r.data.lights.sync || {}; pj.cues = r.data.lights.cues || 0; if (pj.out.open !== r.data.output.open) { pj.out = r.data.output; pjBar(); }
+  pj.sent = r.data.lights.sent; pj.dropped = r.data.lights.dropped; pj.restoreFailed = r.data.lights.restoreFailed || []; pj.sync = r.data.lights.sync || {}; pj.cues = r.data.lights.cues || 0; if (pj.out.open !== r.data.output.open) { pj.out = r.data.output; pjBar(); }
   pjStatus();
 }
 
@@ -153,7 +153,7 @@ async function pjPlay() {
   } catch (e) { pj.err = e.message; }
   pjEnsureLoop(); pjPush(); pjBar(); pjPanel(); pjStatus();
 }
-async function pjStop() { pj.running = false; try { await call('proj:lights:stop'); } catch {} pj.lastTargets = {}; pjBar(); pjPanel(); pjStatus(); }
+async function pjStop() { pj.running = false; try { const s = await call('proj:lights:stop'); pj.restoreFailed = s.restoreFailed || []; } catch (e) { pj.err = e.message; } pj.lastTargets = {}; pjBar(); pjPanel(); pjStatus(); }
 // The light mode changed while playing: start or stop the bulb side to match.
 async function pjModeChanged() {
   if (!pj.running) return;
@@ -189,7 +189,7 @@ function pjStatus() {
   const el = $('#pjStatus'); if (!el) return;
   const mode = PJ.LIGHT_MODES.find((m) => m[0] === pj.cur.lights.mode)[1], sent = Object.keys(pj.sent || {}).filter((b) => pj.sent[b]).map((b) => `${BRANDS[b] || b} ${pj.sent[b]}`).join(', ');
   const bits = [`${pj.cur.regions.length} shape${pj.cur.regions.length === 1 ? '' : 's'}`, `Projection ${pj.out.open ? 'showing' : 'not showing'}`, `Lights: ${mode}${pj.running && pj.cur.lights.mode !== 'off' ? ` (running${sent ? ', commands sent: ' + sent : ''})` : ''}`, `Music: ${pjAudioLine()}`, `Mode: ${{ manual: 'Manual', reactive: 'Music reactive', auto: 'Autonomous' }[pj.cur.mode]}`];
-  const errs = [pj.err, pj.R && pj.R.error, ...(pj.dropped || []).map((d) => `${d.name} left the sync: ${d.reason}`)].filter(Boolean);
+  const errs = [pj.err, pj.R && pj.R.error, ...(pj.restoreFailed || []).map((d) => `${d.name} was not restored: ${d.reason}`), ...(pj.dropped || []).map((d) => `${d.name} left the sync: ${d.reason}`)].filter(Boolean);
   el.innerHTML = `<span>${bits.map(esc).join('. ')}.</span>${pj.add ? '<span class="pj-hint">Click on the stage to place each corner. Double-click to finish.</span>' : ''}${errs.map((m) => `<div class="note err" style="margin:6px 0 0"><i class="led bad"></i><span>${esc(m)}</span></div>`).join('')}`;
 }
 const pjSlider = (label, key, min, max, step, val, unit = '') => `<div class="f"><label>${label} <span class="muted" id="pjv-${key}">${esc(val + unit)}</span></label><input type="range" data-k="${key}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
@@ -217,7 +217,7 @@ function pjPanel() {
     const all = pjLights();
     el.innerHTML = `<div class="sect">What the bulbs do</div><div class="pj-modes">${PJ.LIGHT_MODES.map(([k, n, d]) => `<button class="mode ${L.mode === k ? 'on' : ''}" data-lmode="${k}"><b>${n}</b><small>${d}</small></button>`).join('')}</div>
       ${pjSlider('Brightness', 'L.brightness', 5, 100, 1, L.brightness, '%')}${pjSlider('Sensitivity', 'L.sensitivity', 0.3, 3, 0.1, L.sensitivity, '×')}${pjSlider('Smoothness of changes', 'L.smooth', 0, 0.95, 0.05, L.smooth)}
-      <div class="row pj-wrap"><button class="btn ${pj.cur.blackout ? 'on' : ''}" data-a="blackout" data-tip="Projector black, bulbs keep following">Lights only</button><button class="btn" data-a="restore" ${pj.running ? '' : 'disabled'} data-tip="Stop and put every bulb back how it was">Restore previous lighting</button></div>
+      <div class="row pj-wrap"><button class="btn ${pj.cur.blackout ? 'on' : ''}" data-a="blackout" data-tip="Projector black, bulbs keep following">Lights only</button><button class="btn" data-a="restore" ${pj.running || (pj.restoreFailed || []).length ? '' : 'disabled'} data-tip="Stop and restore every bulb; retry any failed bulb">${pj.restoreFailed && pj.restoreFailed.length ? 'Retry failed restores' : 'Restore previous lighting'}</button></div>
       <div class="sect">Bulbs taking part</div>${all.length ? `<div class="pj-list">${all.map((d) => `<div class="pj-item"><input type="checkbox" data-inc="${esc(d.id)}" ${L.exclude.includes(d.id) ? '' : 'checked'}><span>${esc(d.name)}</span><small>${BRANDS[d.brand]}${d.caps.color ? '' : ', white only'}</small>
         ${L.mode === 'custom' ? `<select data-cust="${esc(d.id)}">${[['match', 'Match'], ['ambient', 'Ambient'], ['music', 'Music'], ['immersive', 'Immersive'], ['off', 'Leave alone']].map(([k, n]) => `<option value="${k}" ${(L.custom[d.id] || 'match') === k ? 'selected' : ''}>${n}</option>`).join('')}</select>` : ''}
         ${r ? `<label class="pj-link" data-tip="This bulb takes the colour inside “${esc(r.name)}” instead of the whole picture"><input type="checkbox" data-link="${esc(d.id)}" ${r.lights.includes(d.id) ? 'checked' : ''}>follows shape</label>` : ''}</div>`).join('')}</div>

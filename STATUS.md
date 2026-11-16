@@ -2,6 +2,11 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (retryable light restoration)
+- Fixed a restore failure path: manager.apply reports per-device failures in its result instead of throwing, while Projection Lights previously discarded every saved snapshot regardless. Failed or temporarily unavailable bulbs now remain in the snapshot, are reported in Studio status, and can be retried from Lights.
+- `node test/projection.js` passes the failure-then-retry case (snapshot retained after first failure and cleared after success); `node --check` passes for the changed main and renderer files. `npm test` passes the Projection tests and remains blocked at the WiZ fixture bind (`EPERM` on `127.0.0.70:38899`).
+- Next: continue auditing tab controls and projector/output edge cases; actual retry against a disconnected bulb needs real hardware/provider access.
+
 ### 2026-11-15 Codex (restore lifecycle)
 - Fixed two restore-ordering risks: Projection Lights now waits for its in-flight cloud command before sending the saved state, and concurrent Stop calls share one restoration operation. Native app quit now intercepts `before-quit` and waits for active drivers; window close no longer destroys the app after a fixed four-second race.
 - `node test/projection.js` passes an in-flight command ordering check with concurrent Stop calls; syntax checks and `git diff --check` pass. `npm test` still stops at the WiZ fixture bind restriction. The Electron app cannot run here (SIGABRT), so native quit and real-bulb restoration remain runtime-unverified.
@@ -48,6 +53,7 @@ Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else
 
 ## Gaps found
 - Projection Studio has not yet had a full interactive run. Multi-display/fullscreen behavior, Esc close, WebGL rendering, and real bulb state restoration still need hands-on verification.
+- Projection Studio cannot guarantee a failed provider restore until the bulb is reachable again. The snapshot is now retained and a retry is exposed; real reconnect and retry behavior is unverified here.
 - Native app quit and window-close restoration paths have code changes and hardware-free ordering coverage, but Electron's local SIGABRT prevents runtime verification of the actual app shutdown sequence.
 - macOS still does not provide system sound capture. Projection Studio now switches to Microphone if its system source produces no audio track; actual microphone capture and permission handling need a real-Mac check. Effects still requires the user to choose Microphone manually.
 - test/run.js, show.js, effects.js, av.js, ui.js, studio.js (previously run by `npm test`) are missing from this repo. An older copy of some (run.js, show.js, ui.js, shot.js) exists in the zip in the `lumennnnnnnnnnnn` repo (older source; must be checked against current code before use).

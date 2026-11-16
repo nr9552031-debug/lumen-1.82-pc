@@ -39,6 +39,25 @@ async function main() {
   await Promise.all([slowLights.stop(), slowLights.stop()]);
   assert.deepStrictEqual(order, ['show-write', 'restore'], 'the restore command follows the in-flight show command');
 
+  // A rejected restore stays visible and retryable instead of silently discarding the only snapshot.
+  const retryDevice = { id: 'retry', brand: 'wiz', name: 'Retry bulb', online: true, on: true, brightness: 42, rgb: [2, 3, 4], mode: 'color', caps: { color: true, dim: true } };
+  let rejectRestore = true, attempts = 0;
+  const retryManager = {
+    devices: new Map([[retryDevice.id, retryDevice]]), providers: { wiz: { setState: async () => {} } },
+    _normalize: (_dev, p) => p, _emit: () => {},
+    apply: async () => { attempts++; return rejectRestore ? { ok: 0, failed: 1 } : { ok: 1, failed: 0 }; },
+  };
+  const retryLights = new ProjLights({ manager: retryManager, now: () => 2000 });
+  retryLights.start(); retryLights.frame({ retry: { rgb: [90, 80, 70], bri: 65 } });
+  await retryLights.stop();
+  assert.strictEqual(retryLights.status().restoreFailed[0].id, 'retry', 'failed restores are reported');
+  assert.strictEqual(retryLights.snapshot.has('retry'), true, 'failed restore keeps its original snapshot');
+  rejectRestore = false;
+  await retryLights.stop();
+  assert.strictEqual(attempts, 2, 'a second Stop retries the failed restore');
+  assert.strictEqual(retryLights.snapshot.has('retry'), false, 'successful retry clears the snapshot');
+  assert.strictEqual(retryLights.status().restoreFailed.length, 0, 'successful retry clears the failure status');
+
   // Verify every animation in the picker has a matching shader and is placed in exactly one picker group.
   const renderWindow = {
     LumenProj: PJ,

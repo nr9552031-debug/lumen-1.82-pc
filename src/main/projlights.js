@@ -16,9 +16,9 @@ class ProjLights {
     this.m = manager; this.now = now || (() => Number(process.hrtime.bigint() / 1000n) / 1000); this.rates = { ...RATE, ...(rates || {}) };
     this.latencyOf = latencyOf || (() => 0); this.intervalOf = intervalOf || null; this.timers = timers || { set: setInterval, clear: clearInterval };
     this.active = false; this.lights = new Map(); this.snapshot = new Map(); this.sent = {}; this.dropped = []; this.smooth = 0.6; this.lastEmit = 0;
-    this.sched = createScheduler({ now: () => this.now() }); this.cueTimer = null; this.cues = 0; this.stopPromise = null;
+    this.sched = createScheduler({ now: () => this.now() }); this.cueTimer = null; this.cues = 0; this.stopPromise = null; this.restoreFailed = [];
   }
-  status() { return { active: this.active, ids: [...this.lights.keys()], sent: { ...this.sent }, dropped: [...this.dropped], cues: this.cues, sync: this.sched.stats() }; }
+  status() { return { active: this.active, ids: [...this.lights.keys()], sent: { ...this.sent }, dropped: [...this.dropped], restoreFailed: [...this.restoreFailed], cues: this.cues, sync: this.sched.stats() }; }
   _light(id, dev) {
     let l = this.lights.get(id);
     if (!l) { if (!this.snapshot.has(id)) this.snapshot.set(id, snapOf(dev)); l = { cur: null, lastSent: -1e9, last: null, busy: false, pending: null, fails: 0, holdUntil: 0 }; this.lights.set(id, l); }
@@ -110,8 +110,20 @@ class ProjLights {
     this.active = false; this.sched.clear(); if (this.cueTimer) { this.timers.clear(this.cueTimer); this.cueTimer = null; }
     const lights = [...this.lights.values()]; this.lights = new Map();
     await Promise.allSettled(lights.map((l) => l.pending).filter(Boolean)); // restore only after every in-flight output settles
-    const snap = this.snapshot; this.snapshot = new Map();
-    if (restore) await Promise.allSettled([...snap].map(([id, s]) => this.m.devices.has(id) ? this.m.apply([id], patchOf(s)) : null));
+    if (restore) {
+      this.restoreFailed = [];
+      for (const [id, s] of this.snapshot) {
+        const dev = this.m.devices.get(id);
+        if (!dev) { this.restoreFailed.push({ id, name: id, reason: 'device is unavailable; retry after it reconnects' }); continue; }
+        try {
+          const result = await this.m.apply([id], patchOf(s));
+          if (result && result.failed) throw new Error(dev.lastError && dev.lastError.msg || 'provider rejected the restore command');
+          this.snapshot.delete(id);
+        } catch (error) {
+          this.restoreFailed.push({ id, name: dev.name || id, reason: error.message });
+        }
+      }
+    }
     const ss = this.sched.stats(), miss = Object.values(ss).reduce((a, x) => a + x.missed, 0);
     diag.log('proj', `light sync stopped sent=${JSON.stringify(this.sent)} cues=${this.cues} missed=${miss}`);
     this.m._emit();
