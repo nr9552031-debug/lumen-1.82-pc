@@ -58,6 +58,12 @@
     laser: R(1.0, 'swirl', 0.04, [0.1, 0.3], [0, 0.05], [0.2, 0.5], 0.7, 0.01, 'spin', 'turb', 'dens', 'burst flip palette surge calm'),
     disco: R(0.9, 'swirl', 0.04, [0, 0.1], [0, 0.05], [0.2, 0.4], 0.7, 0.012, 'spin', 'cplx', 'dens', 'burst flip palette surge'),
     hex: R(0.8, 'pan', 0.03, [0, 0.1], [0.02, 0.08], [0.2, 0.4], 0.5, 0.01, 'swell', 'cplx', 'detail', 'morph palette flip surge calm'),
+    'wall-tide': R(0.45, 'wind', 0.025, [0.05, 0.16], [0.1, 0.25], [0.2, 0.35], 0.2, 0.004, 'swell', 'warp', 'shim', 'flip palette calm surge'),
+    'ripple-choir': R(0.55, 'orbit', 0.02, [0.08, 0.18], [0.06, 0.14], [0.2, 0.35], 0.25, 0.006, 'swell', 'turb', 'detail', 'layer palette calm surge'),
+    'ribbon-weave': R(0.65, 'wind', 0.04, [0.12, 0.25], [0.14, 0.3], [0.2, 0.4], 0.35, 0.008, 'swell', 'turb', 'detail', 'flip layer palette morph calm'),
+    murmuration: R(0.8, 'orbit', 0.045, [0.15, 0.3], [0.05, 0.16], [0.2, 0.4], 0.8, 0.007, 'swell', 'turb', 'dens', 'flip layer burst palette calm'),
+    'frame-drips': R(0.35, 'fall', 0.02, [0.06, 0.16], [0.05, 0.15], [0.1, 0.25], 0.15, 0.003, 'swell', 'turb', 'detail', 'morph palette calm'),
+    'cell-garden': R(0.4, 'pan', 0.025, [0.1, 0.22], [0.08, 0.18], [0.2, 0.35], 0.35, 0.006, 'swell', 'turb', 'detail', 'morph layer palette calm surge'),
   };
   const VARIATIONS = ['flip', 'layer', 'burst', 'morph', 'palette', 'calm', 'surge'];
   const DEFAULTS = { on: true, speed: 1, complexity: 0.5, music: 1, variation: 0.5, intensity: 1 };

@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased (2026-11-16)
+- Projection Studio: add Wall Tide, Ripple Choir, Ribbon Weave, Murmuration, Frame Drips, and Cell Garden with per-effect audio/evolution profiles; add a saved Ripple Reveal transition. Keep all 35 previous animation IDs and their layouts intact.
 - Projection Studio: rebuild the Ambient animations as a steady gradient, soft light pools, and a palette-based sunset; remove hash speckles from the ambient scenes.
 - Projection Studio: make Lightning a bounded beat/onset/drop effect with a quiet idle instead of repeated random flashes during silence.
 - Projection Studio: rebuild Galaxy, Nebula, Plasma, and Ink as distinct spiral, cloud veil, interference, and marbled-pigment effects.

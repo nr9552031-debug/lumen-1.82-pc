@@ -572,7 +572,7 @@ function pjOnBeat(fn) {
   pj.sched.at('display', T, { manual: fn }, { priority: 3 });
 }
 // transition style: the user's choice, or one that suits the Autonomous personality, varied from change to change
-const PERS_XF = { ambient: ['fade', 'dissolve', 'morph'], psychedelic: ['morph', 'dissolve', 'bloom'], electronic: ['sweep', 'bloom', 'dissolve'], cinematic: ['fade', 'bloom', 'morph'], party: ['sweep', 'dissolve', 'bloom'] };
+const PERS_XF = { ambient: ['fade', 'dissolve', 'morph', 'ripple'], psychedelic: ['morph', 'dissolve', 'bloom', 'ripple'], electronic: ['sweep', 'bloom', 'dissolve', 'ripple'], cinematic: ['fade', 'bloom', 'morph', 'ripple'], party: ['sweep', 'dissolve', 'bloom', 'ripple'] };
 function pjXf() {
   const want = pj.cur.evolve.xf; if (want !== 'auto') return want;
   const opts = PERS_XF[pj.cur.auto.personality] || PERS_XF.ambient; let k;
@@ -597,7 +597,7 @@ function pjEvoPanel() {
     <a href="#" class="small" data-a="evoadv">${pj.evoAdv ? 'Hide' : 'More'} evolution settings</a>
     ${pj.evoAdv ? `${sl('complexity', 'Complexity', 0, 1, 0.05, 'How much detail and how many layers the animations build up')}${sl('variation', 'Surprises', 0, 1, 0.05, 'How often an animation starts something new by itself: a new layer, a change of direction, a colour shift')}
       ${sl('change', 'Animation changes (Autonomous)', 0, 1, 0.05, 'How often Autonomous mode moves to another animation', A.change, 'data-auto')}
-      <div class="f"><label>Transition style</label><select data-evo="xf">${[['auto', 'Varied (suits the mood)'], ['fade', 'Crossfade'], ['dissolve', 'Dissolve'], ['bloom', 'Bloom from the centre'], ['sweep', 'Sweep across'], ['morph', 'Melt / morph']].map(([k, n]) => `<option value="${k}" ${E.xf === k ? 'selected' : ''}>${n}</option>`).join('')}</select></div>` : ''}`;
+      <div class="f"><label>Transition style</label><select data-evo="xf">${[['auto', 'Varied (suits the mood)'], ['fade', 'Crossfade'], ['dissolve', 'Dissolve'], ['bloom', 'Bloom from the centre'], ['sweep', 'Sweep across'], ['morph', 'Melt / morph'], ['ripple', 'Ripple reveal']].map(([k, n]) => `<option value="${k}" ${E.xf === k ? 'selected' : ''}>${n}</option>`).join('')}</select></div>` : ''}`;
 }
 function pjEvoSet(t) {
   const k = t.dataset.evo, v = t.type === 'checkbox' ? t.checked : t.type === 'range' ? +t.value : t.value;

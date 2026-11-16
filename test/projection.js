@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const vm = require('vm');
 const PJ = require('../src/shared/proj-core');
+const EVO = require('../src/shared/av-evolve');
 const PJA = require('../src/shared/proj-audio');
 const { createSaveQueue, commitProjectPhoto, runForCurrentProject } = require('../src/shared/proj-save');
 const { createApi } = require('../src/main/api');
@@ -26,7 +27,19 @@ async function main() {
   assert.strictEqual(PJ.palettePixels('aurora', 1).length, 8, 'palette texture generation clamps to the minimum valid width');
   assert.strictEqual(PJ.palettePixels('aurora', 2048).length, 4096, 'palette texture generation caps its allocation');
   assert.deepStrictEqual(PJ.paletteColor('not-a-palette', 0), PJ.paletteColor('aurora', 0), 'unknown palettes migrate to a safe default');
-  for (const id of PJ.PRESET_IDS) assert.strictEqual(PJ.presetId(id), id, `${id} keeps resolving for existing layouts`);
+  const legacyIds = ['galaxy', 'stars', 'nebula', 'aurora', 'warp', 'fire', 'smoke', 'clouds', 'ocean', 'waves', 'portal', 'energy', 'lightning', 'magic', 'particles', 'plasma', 'fractal', 'kaleido', 'tunnel', 'gradient', 'glow', 'flow', 'lava', 'ink', 'bokeh', 'fireflies', 'rays', 'rain', 'snow', 'sunset', 'synth', 'rings', 'laser', 'disco', 'hex'];
+  for (const id of legacyIds) {
+    assert(PJ.PRESET_IDS.includes(id), `${id} remains available for old saved layouts`);
+    assert.strictEqual(PJ.presetId(id), id, `${id} keeps resolving for existing layouts`);
+  }
+  const added = ['wall-tide', 'ripple-choir', 'ribbon-weave', 'murmuration', 'frame-drips', 'cell-garden'];
+  assert.strictEqual(legacyIds.length, 35);
+  assert.strictEqual(PJ.PRESET_IDS.length, 41, 'six new animations extend the existing 35 without removing saved IDs');
+  assert.deepStrictEqual(PJ.XF.slice(0, 6), ['auto', 'fade', 'dissolve', 'bloom', 'sweep', 'morph'], 'the new transition is appended so old saved transition indices keep their meaning');
+  for (const id of added) {
+    assert.strictEqual(PJ.presetId(id), id, `${id} resolves as a stable saved animation ID`);
+    assert(PJ.PROFILES[id] && EVO.RULES[id], `${id} has its own music and continuous-evolution profile`);
+  }
   assert.strictEqual(PJ.presetId('unknown-preset'), 'galaxy', 'unknown preset data has a safe fallback');
   assert.strictEqual(PJ.project({}).palette, 'aurora', 'older projects receive the shared palette default');
   assert.strictEqual(PJ.project({ palette: 'ember' }).palette, 'ember', 'saved palette selection round-trips');
@@ -154,6 +167,15 @@ async function main() {
     assert(shader.includes('pal(') && /\b(A|SWELL|EMIT|TURB|SHIM)\b/.test(shader), `${id} uses shared palette and audio controls`);
     assert(!shader.includes('h1('), `${id} ambient shader avoids random-looking hash speckles`);
   }
+  for (const id of added) {
+    const marker = `${id.includes('-') ? `'${id}'` : id}: \``; const start = renderSource.indexOf(marker) + marker.length, end = renderSource.indexOf('`', start), shader = renderSource.slice(start, end);
+    assert(start >= marker.length && end > start, `${id} new animation shader source remains present`);
+    assert(shader.includes('pal(') && /\b(A|SWELL|EMIT|TURB|SHIM|SHOCKA)\b/.test(shader), `${id} uses the shared palette and audio controls`);
+    const bounds = [...shader.matchAll(/for\(int\s+\w+=\d+;\s*\w+<([0-9]+);/g)].map((m) => +m[1]);
+    assert(bounds.length > 0 && bounds.every((v) => v <= 16), `${id} uses fixed, bounded shader loops`);
+  }
+  assert(PJ.XF.includes('ripple') && renderSource.includes("'morph', 'ripple'") && renderSource.includes('float front=k*1.58'), 'ripple transition has a saved project value and shared radial mask');
+  assert(fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8').includes("['ripple', 'Ripple reveal']"), 'Visuals transition picker exposes Ripple reveal');
   const editorSource = fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8');
   assert(editorSource.includes('data-palette') && editorSource.includes('pj.cur.palette = PJ.paletteId(t.value)'), 'Visuals tab persists the selected shared palette');
   const grouped = PJ.GROUPS.flatMap((g) => g[1]);
@@ -180,7 +202,10 @@ async function main() {
   const manager = { providers: { wiz: {}, hubspace: {}, cync: {} }, devices: new Map(), _meta: () => ({}), _normalize: (_d, p) => p, _emit: () => {} };
   const fx = { active: false, stop: async () => {} };
   const api = createApi({ manager, store, fx, automation: {}, diag: { redact: String, dump: () => '', log: () => {} }, platform: { version: 'test' } });
-  const input = PJ.project({ name: 'Studio persistence', regions: [{ id: 'wall-1', name: 'North wall', preset: 'hex', pts: PJ.shape('polygon'), speed: 1.7, hue: 92, bright: 0.7, opacity: 0.8, blend: 'screen', lights: ['bulb-1'] }] });
+  const input = PJ.project({ name: 'Studio persistence', evolve: { xf: 'ripple' }, regions: [
+    { id: 'wall-1', name: 'North wall', preset: 'hex', pts: PJ.shape('polygon'), speed: 1.7, hue: 92, bright: 0.7, opacity: 0.8, blend: 'screen', lights: ['bulb-1'] },
+    { id: 'frame-1', name: 'Picture frame', preset: 'frame-drips', pts: PJ.shape('rect', 0.5, 0.3, 0.25, 0.3) },
+  ] });
   const saved = api['proj:save'](input);
   assert(saved.id, 'new projects receive a persistent id');
   const loaded = api['proj:list']().map(PJ.project)[0];
@@ -188,6 +213,8 @@ async function main() {
   assert.deepStrictEqual(loaded.regions[0], saved.regions[0]);
   assert.strictEqual(loaded.regions[0].preset, 'hex');
   assert.strictEqual(loaded.regions[0].blend, 'screen');
+  assert.strictEqual(loaded.regions[1].preset, 'frame-drips', 'a new animation keeps its ID through save and load');
+  assert.strictEqual(loaded.evolve.xf, 'ripple', 'the new transition setting keeps its value through save and load');
   assert(saves > 0, 'project save reaches the store');
 
   // A device that repeatedly rejects projection updates is dropped from live driving, but its

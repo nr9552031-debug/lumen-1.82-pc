@@ -2,6 +2,11 @@
 Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-16 Codex (animation overhaul milestone 4 new effects and Ripple Reveal)
+- Added Wall Tide, Ripple Choir, Ribbon Weave, Murmuration, Frame Drips, and Cell Garden as six new stable animation IDs with per-effect audio/evolution profiles. Kept all 35 previous IDs and added Ripple Reveal as a project-saveable transition without changing the existing transition order. Updated the picker groups and README count to 41.
+- `node test/projection.js` passes the 41-ID inventory, per-profile bounds and silence checks, per-shader palette/audio source and loop bounds, and save/load round-tripping for Frame Drips and Ripple Reveal. `node --check` for the touched JavaScript and `git diff --check` pass. `npm test` passes the Projection test, then stops at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). No GLSL compiler/GPU or visible app is available here, so compile, appearance, and frame-rate behavior are unverified.
+- Next: milestone 5 quality tiers, adaptive fallback with hysteresis, and render-path performance improvements. Owner should try all six new effects, Ripple Reveal, saved layouts, and room-scale appearance on Mac and PC.
+
 ### 2026-11-16 Codex (animation overhaul milestone 3 Ambient family)
 - Rebuilt Gradient as a steady spatial wash, Glow as two slowly breathing soft pools, and Sunset as a palette-based sky, sun, cloud band, and water reflection. The ambient shaders no longer add random-looking hash speckles. All 35 existing preset IDs now have family rebuilds; no preset or saved layout field was removed.
 - `node --check src/shared/proj-render.js` and `node --check test/projection.js` pass. `node test/projection.js` verifies palette/audio wiring and no hash speckles in these three ambient shaders, plus source/profile checks from the other families. `npm test` passes Projection checks, then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). Shader compile, GPU performance, and appearance remain unverified.
@@ -119,6 +124,7 @@ Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else
 - VERIFIED (local, 2026-11-16): `node test/projection.js` checks shared palette/audio source wiring for the 4 rebuilt Noise Field shaders; this is not GLSL compilation or rendered appearance.
 - VERIFIED (local, 2026-11-16): `node test/projection.js` verifies the Lightning feature profile receives beat/onset/drop events and the shader has no time-based flash timer; it does not render the shader.
 - VERIFIED (local, 2026-11-16): `node test/projection.js` checks palette/audio source wiring and absence of hash-speckle code in the 3 rebuilt Ambient shaders. It does not compile or render GLSL.
+- VERIFIED (local, 2026-11-16): `node test/projection.js` confirms 41 picker IDs (the original 35 plus six additions), unique group membership, shader/profile/evolver coverage, bounded loop sizes in the new effects, and save/load of Frame Drips and Ripple Reveal. Syntax and `git diff --check` also pass. These tests do not compile GLSL or show how the effects look.
 - UNVERIFIED: app launch; after `npm ci`, `npm start` exits with `SIGABRT` before the Studio UI is visible. The stack trace did not identify the cause.
 - VERIFIED (GitHub Actions run on main, commit 0e06276): the 3 WiZ simulated-bulb tests (wiz-caps, wiz-errors, wiz-multi) pass on Windows, macOS and Linux.
 - VERIFIED (same run): `npm run dist` and `npm run dist:mac` both produced artifacts (Windows installer + portable exe; Mac arm64/x64 dmg + zip), published to the `latest` release.
@@ -127,7 +133,7 @@ Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else
 
 ## Gaps found
 - Projection Studio has not yet had a full interactive run. Multi-display/fullscreen behavior, Esc close, WebGL rendering, and real bulb state restoration still need hands-on verification.
-- The new palette and audio helpers are unit-tested but not connected to GLSL or the picker yet; the visual family overhaul and quality adaptation are unfinished, and no animation appearance/performance result is verified.
+- The shared palette and audio controls are connected to all 41 shaders and the picker. The visual family overhaul is complete at source level; GLSL compilation and appearance remain unverified. Low/Medium/High tiers and adaptive quality are still unfinished, with no 1080p/4K performance result.
 - Projection Studio cannot guarantee a failed provider restore until the bulb is reachable again. The snapshot is now retained and a retry is exposed; real reconnect and retry behavior is unverified here.
 - Native app quit and window-close restoration paths have code changes and hardware-free ordering coverage, but Electron's local SIGABRT prevents runtime verification of the actual app shutdown sequence.
 - macOS still does not provide system sound capture. Projection Studio now switches to Microphone if its system source produces no audio track; actual microphone capture and permission handling need a real-Mac check. Effects still requires the user to choose Microphone manually.

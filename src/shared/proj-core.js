@@ -5,7 +5,7 @@
   'use strict';
   const C = typeof module !== 'undefined' && module.exports ? require('./color.js') : root.LumenColor;
   const EVO = typeof module !== 'undefined' && module.exports ? require('./av-evolve.js') : root.LumenEvolve;
-  const XF = ['auto', 'fade', 'dissolve', 'bloom', 'sweep', 'morph'];
+  const XF = ['auto', 'fade', 'dissolve', 'bloom', 'sweep', 'morph', 'ripple'];
   const DIR = typeof module !== 'undefined' && module.exports ? require('./av-director.js') : root.LumenDirector; // settings for Autonomous mode
   const MODES = ['manual', 'reactive', 'auto'];
   const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
@@ -18,11 +18,14 @@
     // added in 1.6.1
     ['flow', 'Silk Flow'], ['lava', 'Lava Lamp'], ['ink', 'Ink in Water'], ['bokeh', 'Bokeh Lights'], ['fireflies', 'Fireflies'], ['rays', 'Underwater Rays'],
     ['rain', 'Rain'], ['snow', 'Snowfall'], ['sunset', 'Sunset'], ['synth', 'Synthwave'], ['rings', 'Pulse Rings'], ['laser', 'Lasers'], ['disco', 'Disco Lights'], ['hex', 'Hex Pulse'],
+    // added in 1.8: wall-scale and mapping-friendly studies
+    ['wall-tide', 'Wall Tide'], ['ripple-choir', 'Ripple Choir'], ['ribbon-weave', 'Ribbon Weave'],
+    ['murmuration', 'Murmuration'], ['frame-drips', 'Frame Drips'], ['cell-garden', 'Cell Garden'],
   ];
   // how the animation picker groups them (every animation appears exactly once)
   const GROUPS = [
-    ['Calm', ['flow', 'lava', 'ink', 'bokeh', 'gradient', 'glow', 'plasma']],
-    ['Nature', ['fireflies', 'rays', 'ocean', 'waves', 'rain', 'snow', 'sunset', 'clouds', 'aurora', 'fire', 'smoke', 'lightning']],
+    ['Calm', ['flow', 'lava', 'ink', 'bokeh', 'gradient', 'glow', 'plasma', 'wall-tide', 'ripple-choir', 'ribbon-weave', 'cell-garden']],
+    ['Nature', ['fireflies', 'rays', 'ocean', 'waves', 'rain', 'snow', 'sunset', 'clouds', 'aurora', 'fire', 'smoke', 'lightning', 'murmuration', 'frame-drips']],
     ['Space', ['galaxy', 'stars', 'nebula', 'warp', 'portal']],
     ['Party', ['rings', 'laser', 'disco', 'synth', 'hex', 'tunnel', 'energy', 'particles', 'magic', 'kaleido', 'fractal']],
   ];
@@ -135,6 +138,12 @@
     laser: { emit: { treble: 0.6, highMid: 0.4 }, turb: { mid: 0.7 }, swell: { bass: 0.6 }, spin: { mid: 0.4 }, tint: { centroid: 0.4 }, shock: 0.5, drop: 1, speed: 0.8 },
     disco: { spin: { mid: 0.7 }, emit: { treble: 0.8 }, swell: { bass: 0.6 }, tint: { centroid: 0.5 }, shock: 0.6, drop: 1, speed: 0.7 },
     hex: { swell: { bass: 0.8 }, emit: { treble: 0.5 }, tint: { mid: 0.5, centroid: 0.3 }, cplx: { build: 0.7 }, shock: 0.9, drop: 1, speed: 0.6 },
+    'wall-tide': { swell: { bass: 0.9, sub: 0.25 }, warp: { lowMid: 0.35 }, shim: { treble: 0.65 }, tint: { centroid: 0.25 }, shock: 0.55, drop: 0.8, speed: 0.45 },
+    'ripple-choir': { swell: { bass: 0.8, sub: 0.25 }, emit: { treble: 0.65 }, shim: { highMid: 0.45 }, tint: { centroid: 0.3 }, shock: 0.8, drop: 0.8, speed: 0.5 },
+    'ribbon-weave': { turb: { mid: 0.65, flux: 0.25 }, spin: { mid: 0.4 }, shim: { treble: 0.8 }, swell: { bass: 0.4 }, tint: { centroid: 0.35 }, shock: 0.5, drop: 0.75, speed: 0.55 },
+    murmuration: { emit: { treble: 0.75, flux: 0.25 }, turb: { mid: 0.5 }, swell: { bass: 0.65 }, shim: { highMid: 0.4 }, tint: { centroid: 0.3 }, shock: 0.6, drop: 0.85, speed: 0.7 },
+    'frame-drips': { swell: { bass: 0.65 }, turb: { mid: 0.45 }, emit: { treble: 0.7 }, shim: { highMid: 0.35 }, tint: { centroid: 0.2 }, shock: 0.4, drop: 0.65, speed: 0.35 },
+    'cell-garden': { swell: { bass: 0.75 }, turb: { mid: 0.65 }, cplx: { build: 0.65 }, tint: { centroid: 0.35 }, shim: { treble: 0.5 }, shock: 0.6, drop: 0.8, speed: 0.4 },
   };
   // Live controls for one shape: st holds eased values between frames (create once with newControls()).
   // out: Float32Array(12) = [warp, turb, emit, swell, spin, tint, shockR, shockA, hit, cplx, shim, drop]. No allocation.
@@ -277,7 +286,7 @@
 
   // dominant hue of each animation (radians, measured from rendered frames; null = mostly grey), used to keep colour
   // continuity when one animation changes into another
-  const HUES = {"galaxy":-0.74,"stars":-1.2,"nebula":2.15,"aurora":-1.65,"warp":-1.96,"fire":0.9,"smoke":null,"clouds":-2.17,"ocean":-1.84,"waves":-2.65,"portal":null,"energy":-0.83,"lightning":-1.14,"magic":1.88,"particles":1.43,"plasma":1.29,"fractal":2.57,"kaleido":3.11,"tunnel":-1.87,"gradient":-0.87,"glow":0.96,"flow":-1.49,"lava":0.85,"ink":2.24,"bokeh":1.13,"fireflies":2.33,"rays":-2.33,"rain":-1.81,"snow":-1.94,"sunset":-0.02,"synth":0.15,"rings":1.69,"laser":1.92,"disco":1.71,"hex":-1.05};
+  const HUES = {"galaxy":-0.74,"stars":-1.2,"nebula":2.15,"aurora":-1.65,"warp":-1.96,"fire":0.9,"smoke":null,"clouds":-2.17,"ocean":-1.84,"waves":-2.65,"portal":null,"energy":-0.83,"lightning":-1.14,"magic":1.88,"particles":1.43,"plasma":1.29,"fractal":2.57,"kaleido":3.11,"tunnel":-1.87,"gradient":-0.87,"glow":0.96,"flow":-1.49,"lava":0.85,"ink":2.24,"bokeh":1.13,"fireflies":2.33,"rays":-2.33,"rain":-1.81,"snow":-1.94,"sunset":-0.02,"synth":0.15,"rings":1.69,"laser":1.92,"disco":1.71,"hex":-1.05,"wall-tide":-1.84,"ripple-choir":-2.17,"ribbon-weave":-1.49,"murmuration":-1.2,"frame-drips":0.9,"cell-garden":1.29};
   const api = { MODES, XF, HUES, PRESETS, PRESET_IDS, PRESET_ALIASES, presetId, PALETTES, PALETTE_IDS, paletteId, paletteColor, palettePixels, audioFeature, GROUPS, PROFILES, CTRL, newControls, controls, BLENDS, LIGHT_MODES, STYLES, STARTERS, uid, pointInPoly, triangulate, bbox, centre, moved, rotated, scaled, shape, region, project, lightTargets };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LumenProj = api;
 })(typeof window !== 'undefined' ? window : globalThis);
