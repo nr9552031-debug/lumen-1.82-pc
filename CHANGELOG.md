@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased (2026-11-16)
+- Projection Studio: make Lightning a bounded beat/onset/drop effect with a quiet idle instead of repeated random flashes during silence.
 - Projection Studio: rebuild Galaxy, Nebula, Plasma, and Ink as distinct spiral, cloud veil, interference, and marbled-pigment effects.
 - Projection Studio: rebuild the 11 Geometry animations with distinct portal, tunnel, ripple, kaleidoscope, synth horizon, laser, disco, honeycomb, energy, warp, and Julia forms. Cap fractal iteration work at 28 steps.
 - Projection Studio: rebuild the five Particle animations as layered star drift, streaming trails, soft-focus bokeh, slow fireflies, and orbital motes/ribbons; bound their repeated shader loops.

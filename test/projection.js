@@ -49,6 +49,9 @@ async function main() {
     assert.strictEqual(quiet.out[8], 0, `${id} has no hit pulse while silent`);
     assert.strictEqual(quiet.out[11], 0, `${id} has no drop burst while silent`);
   }
+  const lightningHit = PJ.newControls();
+  const lightningDrive = PJ.controls('lightning', { impulse: 1, beat: true, beatStrength: 1, drop: true }, 0.1, lightningHit, 1);
+  assert(lightningDrive[7] > 0 && lightningDrive[8] === 1 && lightningDrive[11] === 1, 'lightning profile receives bounded beat, onset, and drop events');
 
   // Debounced writes keep the edited layout attached to its own captured state across quick switches.
   const writes = [], ownerA = { id: '' }, ownerB = { id: 'saved-b' };
@@ -142,6 +145,9 @@ async function main() {
     assert(start >= marker.length && end > start, `${id} noise-field shader source remains present`);
     assert(shader.includes('pal(') && /\b(A|SWELL|EMIT|TURB|SHIM)\b/.test(shader), `${id} uses shared palette and audio controls`);
   }
+  const lightningMarker = 'lightning: `', lightningStart = renderSource.indexOf(lightningMarker) + lightningMarker.length, lightningEnd = renderSource.indexOf('`', lightningStart), lightningShader = renderSource.slice(lightningStart, lightningEnd);
+  assert(lightningShader.includes('HIT') && lightningShader.includes('DROP') && lightningShader.includes('K') && lightningShader.includes('trigger=clamp'), 'lightning is driven by bounded audio events');
+  assert(!lightningShader.includes('floor(t*') && !lightningShader.includes('fract(t*'), 'lightning has no periodic idle flash timer');
   const editorSource = fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8');
   assert(editorSource.includes('data-palette') && editorSource.includes('pj.cur.palette = PJ.paletteId(t.value)'), 'Visuals tab persists the selected shared palette');
   const grouped = PJ.GROUPS.flatMap((g) => g[1]);
