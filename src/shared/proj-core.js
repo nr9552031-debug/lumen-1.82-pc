@@ -5,6 +5,7 @@
   'use strict';
   const C = typeof module !== 'undefined' && module.exports ? require('./color.js') : root.LumenColor;
   const EVO = typeof module !== 'undefined' && module.exports ? require('./av-evolve.js') : root.LumenEvolve;
+  const Q = typeof module !== 'undefined' && module.exports ? require('./proj-quality.js') : root.LumenProjQuality;
   const XF = ['auto', 'fade', 'dissolve', 'bloom', 'sweep', 'morph', 'ripple'];
   const DIR = typeof module !== 'undefined' && module.exports ? require('./av-director.js') : root.LumenDirector; // settings for Autonomous mode
   const MODES = ['manual', 'reactive', 'auto'];
@@ -243,6 +244,7 @@
       sync: { displayMs: num((o.sync || {}).displayMs, 0, 500, 40) },
       // 1.8 continuous evolution: on/off, speed, complexity, music influence, autonomous variation, visual intensity, transition style
       evolve: { ...(EVO ? EVO.normSettings(o.evolve) : {}), xf: XF.includes((o.evolve || {}).xf) ? o.evolve.xf : 'auto' },
+      quality: Q ? Q.normalize(o.quality) : (['low', 'medium', 'high'].includes(o.quality) ? o.quality : 'medium'), autoQuality: o.autoQuality !== false,
       grid: !!o.grid, outlines: !!o.outlines, blackout: !!o.blackout, photo: typeof o.photo === 'string' && o.photo.startsWith('data:image/') && o.photo.length < 600000 ? o.photo : '', photoOpacity: num(o.photoOpacity, 0, 1, 0.5) };
   }
   const R = (name, preset, pts, extra) => region({ name, preset, pts, ...extra });

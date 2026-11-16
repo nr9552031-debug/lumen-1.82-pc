@@ -74,3 +74,5 @@ The Hubspace and Cync integrations are unofficial and reverse-engineered; they c
 5. On **Audio**, listen to system sound or a microphone; on macOS, Projection Studio switches to the microphone when system audio is unavailable. Each shape has its own reaction amount and band.
 
 Bulbs are driven from a separate process at each brand's own pace, so a slow cloud bulb never slows the picture. Not included: mesh warping, edge blending between projectors, and video files as visuals.
+
+Visuals also has **Render quality** (Low, Medium, High). Older layouts start at Medium. Automatic fallback lowers render resolution when frames stay slow and restores quality gradually after the computer catches up; the projector and editor preview adapt independently.

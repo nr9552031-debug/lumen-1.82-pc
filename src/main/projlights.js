@@ -4,6 +4,7 @@
 // effects engine (same rates, same capability handling, same restore-on-stop).
 const { clamp } = require('./util');
 const { RATE } = require('./fx');
+const C = require('../shared/color');
 const diag = require('./diag');
 const { createScheduler } = require('../shared/av-sched');
 const snapOf = (d) => ({ on: d.on, brightness: d.brightness, rgb: Array.isArray(d.rgb) ? [...d.rgb] : d.rgb, mode: d.mode, kelvin: d.kelvin });
@@ -21,7 +22,14 @@ class ProjLights {
   status() { return { active: this.active, ids: [...this.lights.keys()], sent: { ...this.sent }, dropped: [...this.dropped], restoreFailed: [...this.restoreFailed], cues: this.cues, sync: this.sched.stats() }; }
   _light(id, dev) {
     let l = this.lights.get(id);
-    if (!l) { if (!this.snapshot.has(id)) this.snapshot.set(id, snapOf(dev)); l = { cur: null, lastSent: -1e9, last: null, busy: false, pending: null, fails: 0, holdUntil: 0 }; this.lights.set(id, l); }
+    if (!l) {
+      if (!this.snapshot.has(id)) this.snapshot.set(id, snapOf(dev));
+      const before = this.snapshot.get(id), startRgb = Array.isArray(before.rgb) && before.rgb.length === 3 ? before.rgb : C.stateRgb(before);
+      const rgb = startRgb && startRgb.length === 3 ? startRgb.map((c) => clamp(Number(c) || 0, 0, 255)) : null;
+      const rawBri = before.brightness, bri = clamp(rawBri != null && Number.isFinite(Number(rawBri)) ? Number(rawBri) : 100, 1, 100);
+      l = { cur: rgb ? { rgb, bri } : null, lastSent: -1e9, last: rgb ? { rgb: rgb.map(Math.round), bri: Math.round(bri) } : null, busy: false, pending: null, fails: 0, holdUntil: 0 };
+      this.lights.set(id, l);
+    }
     return l;
   }
   _interval(dev) { return Math.max(40, (this.intervalOf && this.intervalOf(dev.id)) || this.rates[dev.brand] || 500); }
@@ -79,7 +87,15 @@ class ProjLights {
     this._out(id, dev, l, t, false);
   }
   _out(id, dev, l, t, forced) {
-    const bri = Math.round(l.cur.bri), rgb = l.cur.rgb.map(Math.round);
+    let bri = Math.round(l.cur.bri); const rgb = l.cur.rgb.map(Math.round);
+    // Start from the saved live color and cap each ordinary follow-picture command. Smoothing alone
+    // can still accumulate several frame changes before a slow cloud brand is allowed to send.
+    if (!forced && l.last) {
+      const colorStep = Math.max(12, Math.min(80, Math.round(this._interval(dev) * 0.08)));
+      const brightnessStep = Math.max(10, Math.round(colorStep * 0.75));
+      for (let i = 0; i < 3; i++) rgb[i] = clamp(rgb[i], l.last.rgb[i] - colorStep, l.last.rgb[i] + colorStep);
+      bri = clamp(bri, l.last.bri - brightnessStep, l.last.bri + brightnessStep);
+    }
     if (!forced && l.last && Math.abs(l.last.bri - bri) < 4 && l.last.rgb.every((c, i) => Math.abs(c - rgb[i]) < 12)) return;
     const p = this.m._normalize(dev, { on: true, rgb, brightness: bri }); // drops colour or dimming a light can't do
     l.lastSent = t; l.last = { bri, rgb }; this.sent[dev.brand] = (this.sent[dev.brand] || 0) + 1;

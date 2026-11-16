@@ -6,11 +6,13 @@ const os = require('os');
 const path = require('path');
 const vm = require('vm');
 const PJ = require('../src/shared/proj-core');
+const PQ = require('../src/shared/proj-quality');
 const EVO = require('../src/shared/av-evolve');
 const PJA = require('../src/shared/proj-audio');
 const { createSaveQueue, commitProjectPhoto, runForCurrentProject } = require('../src/shared/proj-save');
 const { createApi } = require('../src/main/api');
 const { ProjLights } = require('../src/main/projlights');
+const { RATE } = require('../src/main/fx');
 
 async function main() {
   // Palette samples are finite, clamped sRGB values; all legacy saved animation IDs resolve.
@@ -43,6 +45,30 @@ async function main() {
   assert.strictEqual(PJ.presetId('unknown-preset'), 'galaxy', 'unknown preset data has a safe fallback');
   assert.strictEqual(PJ.project({}).palette, 'aurora', 'older projects receive the shared palette default');
   assert.strictEqual(PJ.project({ palette: 'ember' }).palette, 'ember', 'saved palette selection round-trips');
+  assert.strictEqual(PJ.project({}).quality, 'medium', 'older projects receive the balanced quality default');
+  assert.strictEqual(PJ.project({}).autoQuality, true, 'older projects enable automatic quality fallback');
+  assert.strictEqual(PJ.project({ quality: 'ultra' }).quality, 'medium', 'unknown quality values normalize safely');
+  const tier = PQ.create('high');
+  for (let i = 0; i < 20; i++) PQ.observe(tier, 24);
+  assert.strictEqual(tier.level, 'high', 'brief frame drops do not lower render quality');
+  for (let i = 0; i < 30; i++) PQ.observe(tier, 24);
+  assert.strictEqual(tier.level, 'medium', 'sustained intervals below 50fps lower quality one tier');
+  for (let i = 0; i < 50; i++) PQ.observe(tier, 24);
+  assert.strictEqual(tier.level, 'low', 'continued slow frames trigger a second bounded downgrade');
+  for (let i = 0; i < 375; i++) PQ.observe(tier, 16);
+  assert.strictEqual(tier.level, 'medium', 'six seconds of stable frames recover one tier');
+  for (let i = 0; i < 375; i++) PQ.observe(tier, 16);
+  assert.strictEqual(tier.level, 'high', 'recovery is gradual and never exceeds the saved tier');
+  PQ.configure(tier, 'low', true);
+  for (let i = 0; i < 500; i++) PQ.observe(tier, 16);
+  assert.strictEqual(tier.level, 'low', 'automatic recovery respects the user-selected quality ceiling');
+  PQ.configure(tier, 'high', false); PQ.observe(tier, 45);
+  assert.strictEqual(tier.level, 'high', 'disabling automatic fallback holds the selected tier');
+  assert.deepStrictEqual(PQ.backingSize(1920, 1080, 2, 'high'), [3840, 2160], 'High keeps full 1080p device-pixel detail');
+  assert.deepStrictEqual(PQ.backingSize(1920, 1080, 2, 'medium'), [2880, 1620], 'Medium reduces internal pixel work');
+  assert.deepStrictEqual(PQ.backingSize(1920, 1080, 2, 'low'), [1920, 1080], 'Low halves Retina backing resolution');
+  const capped = PQ.backingSize(7680, 4320, 1, 'high');
+  assert(capped[0] <= PQ.MAX_DIMENSION && capped[1] <= PQ.MAX_DIMENSION && capped[0] * capped[1] <= PQ.MAX_PIXELS, 'large canvases stay within the internal pixel and dimension caps');
 
   const drive = { sub: 0.3, bass: 0.8, lowMid: 0.2, mid: 0.6, highMid: 0.4, treble: 0.9, onsetStrength: 0.7, beat: true, beatStrength: 0.5, impulse: 0.2, drop: true, trend: -0.4 };
   assert.strictEqual(PJ.audioFeature(drive, 'bass'), 0.8, 'bass remains available to animation profiles');
@@ -65,6 +91,26 @@ async function main() {
   const lightningHit = PJ.newControls();
   const lightningDrive = PJ.controls('lightning', { impulse: 1, beat: true, beatStrength: 1, drop: true }, 0.1, lightningHit, 1);
   assert(lightningDrive[7] > 0 && lightningDrive[8] === 1 && lightningDrive[11] === 1, 'lightning profile receives bounded beat, onset, and drop events');
+
+  for (const brand of Object.keys(RATE)) {
+    let now = 1000; const sent = [], restored = [], id = `rate-${brand}`, initialRgb = [5, 10, 15], initialBrightness = 45;
+    const device = { id, brand, name: `${brand} test`, online: true, on: true, brightness: initialBrightness, rgb: initialRgb.slice(), mode: 'color', caps: { color: true, dim: true } };
+    const manager = { devices: new Map([[id, device]]), providers: { [brand]: { fast: (_dev, patch) => sent.push({ at: now, patch }) } }, _normalize: (_dev, p) => p, _emit: () => {}, apply: async (ids, patch) => { restored.push({ ids, patch }); return { ok: 1, failed: 0 }; } };
+    const lights = new ProjLights({ manager, now: () => now }); lights.start({ smooth: 0 });
+    const colorStep = Math.max(12, Math.min(80, Math.round(RATE[brand] * 0.08))), brightnessStep = Math.max(10, Math.round(colorStep * 0.75));
+    lights.frame({ [id]: { rgb: [255, 220, 200], bri: 100 } });
+    assert.strictEqual(sent.length, 1, `${brand} sends the first picture-following target`);
+    assert(sent[0].patch.rgb.every((c, i) => Math.abs(c - initialRgb[i]) <= colorStep), `${brand} color command has a bounded per-command jump`);
+    assert(sent[0].patch.brightness - initialBrightness <= brightnessStep, `${brand} brightness command has a bounded per-command jump`);
+    now += RATE[brand] - 1; lights.frame({ [id]: { rgb: [255, 220, 200], bri: 100 } });
+    assert.strictEqual(sent.length, 1, `${brand} rate limit blocks early follow-up commands`);
+    now += 1; lights.frame({ [id]: { rgb: [255, 220, 200], bri: 100 } });
+    assert.strictEqual(sent.length, 2, `${brand} resumes at its allowed interval`);
+    assert(sent[1].at - sent[0].at >= RATE[brand], `${brand} never exceeds its configured command rate`);
+    assert(sent[1].patch.rgb.every((c, i) => Math.abs(c - sent[0].patch.rgb[i]) <= colorStep), `${brand} caps every subsequent color jump`);
+    await lights.stop();
+    assert.deepStrictEqual(restored[0], { ids: [id], patch: { on: true, brightness: 45, rgb: [5, 10, 15] } }, `${brand} restores the original bulb state on Stop`);
+  }
 
   // Debounced writes keep the edited layout attached to its own captured state across quick switches.
   const writes = [], ownerA = { id: '' }, ownerB = { id: 'saved-b' };
@@ -124,6 +170,7 @@ async function main() {
   // Verify every animation in the picker has a matching shader and is placed in exactly one picker group.
   const renderWindow = {
     LumenProj: PJ,
+    LumenProjQuality: PQ,
     LumenColor: require('../src/shared/color'),
     LumenEvolve: require('../src/shared/av-evolve'),
     LumenDirector: require('../src/shared/av-director'),
@@ -131,6 +178,9 @@ async function main() {
   const renderSource = fs.readFileSync(path.join(__dirname, '../src/shared/proj-render.js'), 'utf8');
   vm.runInNewContext(renderSource, { window: renderWindow, console });
   assert(renderSource.includes('uniform sampler2D PALETTE') && renderSource.includes('P.palettePixels(key, 256)'), 'shared renderer uploads the normalized shared palette for its GLSL shader');
+  assert(renderSource.includes('uniform float T,H,B,O,A,K,ASP,SHIFT,QUALITY') && renderSource.includes('if(float(i)>=QUALITY*5.)break'), 'quality tiers reduce bounded fBm work as well as backing resolution');
+  assert(renderSource.includes('this.geo.get(r.id), same = !!g && g.pts.length === r.pts.length') && !renderSource.includes('JSON.stringify(r.pts)'), 'stable shape geometry avoids per-frame string allocations');
+  assert(renderSource.includes('gl.bufferData(gl.ARRAY_BUFFER, data, buffer === this.buf ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW)'), 'unchanged shape buffers are uploaded once and reused');
   assert(renderSource.includes('uniform1f(pr.U.SHIFT, st.hue / 360)') && renderSource.includes('fract(rawL+SHIFT+TINT*.08)'), 'shape colour shift continues to move through the selected palette');
   for (const id of ['aurora', 'fire', 'smoke', 'clouds', 'ocean', 'waves', 'flow', 'lava', 'rain', 'snow', 'rays']) {
     const marker = `${id}: \``; const start = renderSource.indexOf(marker) + marker.length, end = renderSource.indexOf('`', start), shader = renderSource.slice(start, end);
@@ -177,6 +227,8 @@ async function main() {
   assert(PJ.XF.includes('ripple') && renderSource.includes("'morph', 'ripple'") && renderSource.includes('float front=k*1.58'), 'ripple transition has a saved project value and shared radial mask');
   assert(fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8').includes("['ripple', 'Ripple reveal']"), 'Visuals transition picker exposes Ripple reveal');
   const editorSource = fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8');
+  assert(editorSource.includes('select[data-quality]') && editorSource.includes('Automatically lower quality when frames drop') && editorSource.includes('PQ.observe'), 'Visuals exposes quality controls and preview fallback');
+  assert(fs.readFileSync(path.join(__dirname, '../src/renderer/projector.js'), 'utf8').includes('Q.observe(quality, t - lastFrame)'), 'projector uses the shared adaptive frame policy');
   assert(editorSource.includes('data-palette') && editorSource.includes('pj.cur.palette = PJ.paletteId(t.value)'), 'Visuals tab persists the selected shared palette');
   const grouped = PJ.GROUPS.flatMap((g) => g[1]);
   assert.strictEqual(grouped.length, PJ.PRESET_IDS.length, 'each animation appears in a picker group');
@@ -187,6 +239,7 @@ async function main() {
   for (const page of ['src/renderer/index.html', 'src/renderer/projector.html']) {
     const html = fs.readFileSync(path.join(__dirname, '..', page), 'utf8');
     for (const [, src] of html.matchAll(/<script[^>]+src="([^"]+)"/g)) assert(fs.existsSync(path.resolve(path.dirname(path.join(__dirname, '..', page)), src)), `${page} script exists: ${src}`);
+    assert(html.indexOf('../shared/proj-quality.js') >= 0 && html.indexOf('../shared/proj-quality.js') < html.indexOf('../shared/proj-core.js'), `${page} loads the quality helper before project normalization`);
   }
 
   assert.strictEqual(PJA.fallbackSource('darwin', 'system', { noTrack: true }), 'mic', 'macOS system capture falls back when no audio track is supplied');
@@ -202,7 +255,7 @@ async function main() {
   const manager = { providers: { wiz: {}, hubspace: {}, cync: {} }, devices: new Map(), _meta: () => ({}), _normalize: (_d, p) => p, _emit: () => {} };
   const fx = { active: false, stop: async () => {} };
   const api = createApi({ manager, store, fx, automation: {}, diag: { redact: String, dump: () => '', log: () => {} }, platform: { version: 'test' } });
-  const input = PJ.project({ name: 'Studio persistence', evolve: { xf: 'ripple' }, regions: [
+  const input = PJ.project({ name: 'Studio persistence', evolve: { xf: 'ripple' }, quality: 'high', autoQuality: false, regions: [
     { id: 'wall-1', name: 'North wall', preset: 'hex', pts: PJ.shape('polygon'), speed: 1.7, hue: 92, bright: 0.7, opacity: 0.8, blend: 'screen', lights: ['bulb-1'] },
     { id: 'frame-1', name: 'Picture frame', preset: 'frame-drips', pts: PJ.shape('rect', 0.5, 0.3, 0.25, 0.3) },
   ] });
@@ -215,6 +268,8 @@ async function main() {
   assert.strictEqual(loaded.regions[0].blend, 'screen');
   assert.strictEqual(loaded.regions[1].preset, 'frame-drips', 'a new animation keeps its ID through save and load');
   assert.strictEqual(loaded.evolve.xf, 'ripple', 'the new transition setting keeps its value through save and load');
+  assert.strictEqual(loaded.quality, 'high', 'quality selection is saved with the project');
+  assert.strictEqual(loaded.autoQuality, false, 'automatic fallback preference is saved with the project');
   assert(saves > 0, 'project save reaches the store');
 
   // A device that repeatedly rejects projection updates is dropped from live driving, but its

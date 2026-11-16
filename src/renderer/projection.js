@@ -3,10 +3,12 @@
    doorway), show them through a projector, and let the smart lights follow. Drawing is done by ProjRenderer;
    the lights are driven separately in the main process, so a slow bulb can never slow the picture down. */
 const PJ = window.LumenProj;
+const PQ = window.LumenProjQuality;
 const pj = { list: null, cur: null, sel: null, tab: 'visuals', undo: [], canvas: null, R: null, timer: null, n: 0, running: false, add: null, drag: null,
   cap: null, feat: null, displays: [], display: '', platform: '', out: { open: false }, thumbs: {}, thumbBusy: false, dom: null, regional: {}, sent: {}, restoreFailed: [], err: '', sample: null, lastTargets: {},
   // 1.7 audiovisual engine
-  eng: null, dir: null, sched: null, ov: {}, live: null, rf: null, beatLatch: false, dropLatch: false, shownBeat: 0, cuedBeat: 0, lat: [], thumbCol: {}, next: null, last: null, adv: false, calib: null, sync: {}, fakeF: null };
+  eng: null, dir: null, sched: null, ov: {}, live: null, rf: null, beatLatch: false, dropLatch: false, shownBeat: 0, cuedBeat: 0, lat: [], thumbCol: {}, next: null, last: null, adv: false, calib: null, sync: {}, fakeF: null, qmon: null, qkey: '', qAt: 0 };
+window.addEventListener('resize', () => { if (pj.R && $('#pjRoot')) pj.R.resize(); });
 const PJD = window.LumenDirector, PJF = window.LumenFeatures, PJS = window.LumenSched;
 const pjSel = () => pj.cur && pj.cur.regions.find((r) => r.id === pj.sel);
 const pjLights = () => S.devices.filter((d) => d.online !== false && d.caps && (d.caps.color || d.caps.dim || d.caps.temp));
@@ -40,7 +42,7 @@ const pjPush = throttle(pjPushNow, 60);
 function pjChanged(repaint) { pjLive(); pjSvg(); pjPush(); pjSave(); if (repaint) pjPanel(); pjStatus(); }
 function pjSnap() { pj.undo.push(JSON.stringify(pj.cur.regions)); if (pj.undo.length > 60) pj.undo.shift(); }
 function pjUndo() { const s = pj.undo.pop(); if (!s) return; pj.cur.regions = JSON.parse(s).map(PJ.region); if (!pjSel()) pj.sel = null; pjChanged(true); }
-function pjOpen(p) { pj.cur = p; pj.sel = p.regions[0] ? p.regions[0].id : null; pj.undo = []; pj.add = null; pj.ov = {}; pjDirector(true); pjLive(); pjPaint(); pjPush(); }
+function pjOpen(p) { pj.cur = p; pj.sel = p.regions[0] ? p.regions[0].id : null; pj.undo = []; pj.add = null; pj.ov = {}; pj.qkey = ''; pjDirector(true); pjLive(); pjPaint(); pjPush(); }
 
 /* ---------- drawing loop: preview, colour sampling, light targets ---------- */
 function pjEnsureLoop() {
@@ -58,6 +60,12 @@ function pjEnsureLoop() {
     // draws less often and at a lower resolution; when they are punctual again it steps back up. The projector
     // window draws on its own and is not affected.
     pjPreviewBudget(now);
+    const qkey = `${pj.cur.quality}:${pj.cur.autoQuality}`;
+    if (qkey !== pj.qkey) { pj.qkey = qkey; pj.qmon = PQ.create(pj.cur.quality); PQ.configure(pj.qmon, pj.cur.quality, pj.cur.autoQuality); }
+    const qdt = pj.qAt ? now - pj.qAt : 0; pj.qAt = now;
+    pj.R.setQuality(PQ.observe(pj.qmon, qdt * (pj.drawEvery || 1), 1000 / 60));
+    const qlabel = $('#pjQualityActive');
+    if (qlabel) { const text = `Preview: ${PQ.label(pj.qmon.level)}${pj.qmon.level === pj.qmon.requested ? '' : ' (auto reduced)'}`; if (qlabel.textContent !== text) qlabel.textContent = text; }
     if (pj.n % pj.drawEvery === 0) pj.R.render(pjView(), now / 1000, f, PJ.STYLES[pj.cur.audio.style] * pj.cur.audio.sensitivity);
     if (pj.calib) pjCalibTick(now);
     if (pj.n++ % 4) return;
@@ -69,7 +77,7 @@ function pjEnsureLoop() {
     }
     if (shown && pj.n % 32 === 1) pjPollStatus();
     if (shown && pj.n % 12 === 1 && pj.tab === 'visuals') pjEvoNow();
-  }, 33);
+  }, 16);
 }
 // Read a tiny copy of the picture: the main colour overall, and the colour inside each shape that has bulbs linked to it.
 function pjSample() {
@@ -170,7 +178,7 @@ function renderProj(c) {
     <div class="pj-main"><div class="pj-left"><div class="panel"><div class="pj-stage" id="pjStage"><img id="pjPhoto" alt=""><svg id="pjSvg" viewBox="0 0 1600 900" preserveAspectRatio="none"></svg></div>
       <div class="pb pj-status" id="pjStatus"></div></div></div>
     <div class="panel pj-side"><div class="pj-tabs" id="pjTabs"></div><div class="pb" id="pjPanel"></div></div></div></div>`;
-  pjEnsureLoop(); $('#pjStage').insertBefore(pj.canvas, $('#pjSvg'));
+  pjEnsureLoop(); $('#pjStage').insertBefore(pj.canvas, $('#pjSvg')); pj.R.resize();
   pjWire(); pjPaint(); pjPush();
 }
 function pjPaint() { pjBar(); pjTabs(); pjPanel(); pjSvg(); pjStatus(); }
@@ -199,7 +207,10 @@ function pjPanel() {
   if (pj.tab === 'auto') { el.innerHTML = pjAutoPanel(); pjAutoLive(); return; }
   if (pj.tab === 'visuals') {
     const paletteNames = { aurora: 'Aurora', ember: 'Ember', tide: 'Tide', dusk: 'Dusk', mono: 'Monochrome' };
-    el.innerHTML = `<div class="sect">Animation${r ? ' for “' + esc(r.name) + '”' : ''}</div><div class="f"><label>Shared palette</label><select data-palette>${PJ.PALETTE_IDS.map((id) => `<option value="${id}" ${pj.cur.palette === id ? 'selected' : ''}>${paletteNames[id] || id}</option>`).join('')}</select></div><div class="pj-presets">${PJ.GROUPS.map(([gn, ids]) => `<div class="pj-gh">${gn}</div>` + ids.map((k) => { const n = (PJ.PRESETS.find((q) => q[0] === k) || [k, k])[1]; return `<button class="${r && r.preset === k ? 'on' : ''}" data-preset="${k}" data-tip="${esc(n)}"><img data-th="${k}" src="${pj.thumbs[k] || ''}" alt=""><span>${esc(n)}</span></button>`; }).join('')).join('')}</div>
+    el.innerHTML = `<div class="sect">Animation${r ? ' for “' + esc(r.name) + '”' : ''}</div><div class="f"><label>Shared palette</label><select data-palette>${PJ.PALETTE_IDS.map((id) => `<option value="${id}" ${pj.cur.palette === id ? 'selected' : ''}>${paletteNames[id] || id}</option>`).join('')}</select></div>
+      <div class="f"><label>Render quality <span class="muted" id="pjQualityActive">Preview: ${PQ.label(pj.R ? pj.R.qualityTier : pj.cur.quality)}</span></label><select data-quality>${PQ.TIERS.map((id) => `<option value="${id}" ${pj.cur.quality === id ? 'selected' : ''}>${PQ.label(id)}</option>`).join('')}</select></div>
+      <label class="pj-chk" data-tip="When frame timing stays slow, reduce render resolution and restore it after a stable recovery period"><input type="checkbox" data-quality-auto ${pj.cur.autoQuality ? 'checked' : ''}>Automatically lower quality when frames drop</label><div class="small muted">The projector adjusts independently; mapped shapes stay in place.</div>
+      <div class="pj-presets">${PJ.GROUPS.map(([gn, ids]) => `<div class="pj-gh">${gn}</div>` + ids.map((k) => { const n = (PJ.PRESETS.find((q) => q[0] === k) || [k, k])[1]; return `<button class="${r && r.preset === k ? 'on' : ''}" data-preset="${k}" data-tip="${esc(n)}"><img data-th="${k}" src="${pj.thumbs[k] || ''}" alt=""><span>${esc(n)}</span></button>`; }).join('')).join('')}</div>
       <div class="row" style="margin:8px 0"><button class="btn" data-a="rand" ${r ? '' : 'disabled'}>Randomize this shape</button><button class="btn" data-a="randall" ${pj.cur.regions.length ? '' : 'disabled'}>Randomize all</button></div>
       ${r ? `<div class="sect">Look</div>${pjSlider('Speed', 'speed', 0, 4, 0.05, r.speed, '×')}${pjSlider('Colour shift', 'hue', 0, 360, 1, r.hue, '°')}${pjSlider('Brightness', 'bright', 0, 2, 0.05, r.bright, '×')}${pjSlider('Opacity', 'opacity', 0, 1, 0.01, r.opacity)}
         <div class="f"><label>Blending with shapes underneath</label><select data-k="blend"><option value="normal" ${r.blend === 'normal' ? 'selected' : ''}>Normal (covers)</option><option value="add" ${r.blend === 'add' ? 'selected' : ''}>Add (glows)</option><option value="screen" ${r.blend === 'screen' ? 'selected' : ''}>Screen (soft light)</option></select></div>` : none}${pjEvoPanel()}`;
@@ -362,6 +373,8 @@ function pjWire() {
   root.addEventListener('change', (e) => {
     const t = e.target, L = pj.cur.lights, r = pjSel();
     if (t.id === 'pjLayout') { const p = pj.list.find((x) => x.id === t.value); if (p) pjOpen(p); return; }
+    if (t.matches('select[data-quality]')) { pj.cur.quality = PQ.normalize(t.value); pj.qkey = ''; return pjChanged(true); }
+    if (t.matches('input[data-quality-auto]')) { pj.cur.autoQuality = t.checked; pj.qkey = ''; return pjChanged(true); }
     if (t.dataset.palette) { pj.cur.palette = PJ.paletteId(t.value); pjChanged(true); return; }
     if (t.id === 'pjDisplay') { pj.display = t.value; return; }
     if (t.id === 'pjFile') { const f = t.files[0]; if (!f) return; const owner = pj.cur, rd = new FileReader(); rd.onload = () => { const img = new Image(); img.onload = () => { const c = document.createElement('canvas'), k = Math.min(1, 960 / img.width); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); LumenProjSave.commitProjectPhoto(owner, c.toDataURL('image/jpeg', 0.7), (p) => pj.cur === p, () => pjChanged(true)); if (pj.cur !== owner) pjSaveQueue.queue(owner, owner); }; img.src = rd.result; }; rd.readAsDataURL(f); return; }
@@ -381,7 +394,7 @@ function pjWire() {
 
 /* ================= 1.7: music features for the renderer, autonomous director, shared timing ================= */
 const pjPct = (v, k) => (k === 'react' ? Math.round(v * 100) + '%' : Math.round(v * 100) + '%');
-// The renderer runs at ~30 fps and the analyser at 50 fps: beats and drops are latched so none is missed, and with
+// The renderer targets ~60 fps and the analyser runs at 40 fps: beats and drops are latched so none is missed, and with
 // a confident tempo the beat is taken from the predicted beat grid, shown early by the projector's own delay.
 function pjShowBeat(now) {
   const A = pj.cur.auto, e = pj.eng;
@@ -608,11 +621,11 @@ function pjEvoSet(t) {
 // what the selected shape is doing right now
 function pjEvoNow() { const el = $('#pjEvoNow'), r = pjSel(); if (!el || !r || !pj.R) return; const d = pj.cur.evolve.on ? pj.R.describe(r.id) : ''; el.textContent = d ? 'Now: ' + d : ''; }
 
-// preview load control (only while listening, which is what it protects): lag = how late the 33 ms draw timer
+// preview load control (only while listening, which is what it protects): lag = how late the 16 ms draw timer
 // fires, smoothed. The preview canvas keeps its last picture between draws, so bulbs following it still see it.
 function pjPreviewBudget(now) {
   if (!pj.drawEvery) { pj.drawEvery = 1; pj.lag = 0; pj.loopAt = now; pj.goodSince = now; }
-  const late = Math.max(0, now - pj.loopAt - 33); pj.loopAt = now;
+  const late = Math.max(0, now - pj.loopAt - 16); pj.loopAt = now;
   if (!SVC.active) { pj.drawEvery = 1; pj.lag = 0; return; }
   pj.lag += (late - pj.lag) * 0.2;
   // at most 4x fewer draws: bulbs following the picture still see it change

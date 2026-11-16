@@ -3,7 +3,7 @@
    Each shape is drawn as its own triangles, so an animation can never spill outside its shape. */
 (function (root) {
   'use strict';
-  const P = root.LumenProj, EVO = root.LumenEvolve;
+  const P = root.LumenProj, EVO = root.LumenEvolve, Q = root.LumenProjQuality;
   const XF_STYLES = ['fade', 'dissolve', 'bloom', 'sweep', 'morph', 'ripple'], AUTO_CTX = { allowTransition: true };
   const wrapPi = (a) => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI; };
   const HEAD = `#ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -11,7 +11,7 @@ precision highp float;
 #else
 precision mediump float;
 #endif
-varying vec2 u; uniform float T,H,B,O,A,K,ASP,SHIFT; uniform int MODE; uniform vec4 P0,P1,P2,E0,E1,XF; uniform sampler2D PALETTE;
+varying vec2 u; uniform float T,H,B,O,A,K,ASP,SHIFT,QUALITY; uniform int MODE; uniform vec4 P0,P1,P2,E0,E1,XF; uniform sampler2D PALETTE;
 #define FLOW E0.xy
 #define PHASE E0.z
 #define MORPH E0.w
@@ -33,7 +33,7 @@ varying vec2 u; uniform float T,H,B,O,A,K,ASP,SHIFT; uniform int MODE; uniform v
 #define DROP P2.w
 float h1(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h1(i),h1(i+vec2(1,0)),f.x),mix(h1(i+vec2(0,1)),h1(i+vec2(1,1)),f.x),f.y);}
-float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*n2(p);p=mat2(.8,.6,-.6,.8)*p*2.03+7.1;a*=.5;}return s;}
+float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){if(float(i)>=QUALITY*5.)break;s+=a*n2(p);p=mat2(.8,.6,-.6,.8)*p*2.03+7.1;a*=.5;}return s;}
 vec3 pal(float t,vec3 d){float q=fract(.5+.5*cos(6.2832*(t+dot(d,vec3(1.7,3.1,5.3)))));return texture2D(PALETTE,vec2(q,.5)).rgb;}
 vec3 hue(vec3 c,float a){vec3 k=vec3(.57735);float ca=cos(a),sa=sin(a);return c*ca+cross(k,c)*sa+k*dot(k,c)*(1.-ca);}
 `;
@@ -105,13 +105,24 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
 
   class ProjRenderer {
     constructor(canvas) {
-      this.cv = canvas; this.progs = {}; this.geo = new Map(); this.beat = 0; this.lastT = 0; this.clock = {}; this.st = {}; this.paletteId = null; this.paletteTex = null;
+      this.cv = canvas; this.baseW = canvas.clientWidth || canvas.width || 960; this.baseH = canvas.clientHeight || canvas.height || 540; this.qualityTier = 'medium';
+      this.progs = {}; this.geo = new Map(); this.beat = 0; this.lastT = 0; this.clock = {}; this.st = {}; this.paletteId = null; this.paletteTex = null;
       this.ctlA = new Float32Array(12); this.ctlB = new Float32Array(12); this.zero8 = new Float32Array(8); this._eoSrc = null; this._eo = EVO ? EVO.DEFAULTS : null;
       const gl = this.gl = canvas.getContext('webgl', { alpha: false, antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
       if (!gl) { this.error = 'This computer did not give Lumen a graphics (WebGL) context, so animations cannot be drawn.'; return; }
-      this.buf = gl.createBuffer(); this._setPalette('aurora');
-      canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.progs = {}; });
-      canvas.addEventListener('webglcontextrestored', () => { const key = this.paletteId || 'aurora'; this.buf = this.gl.createBuffer(); this.paletteTex = null; this.paletteId = null; this.progs = {}; this._setPalette(key); });
+      this.buf = gl.createBuffer(); this._setPalette('aurora'); this.resize();
+      canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.progs = {}; this.geo.clear(); });
+      canvas.addEventListener('webglcontextrestored', () => { const key = this.paletteId || 'aurora'; this.buf = this.gl.createBuffer(); this.paletteTex = null; this.paletteId = null; this.progs = {}; this.geo.clear(); this._setPalette(key); this.resize(); });
+    }
+    setQuality(level) { const next = Q ? Q.normalize(level) : 'medium'; if (next === this.qualityTier) return; this.qualityTier = next; this.resize(); }
+    resize() {
+      const cssW = this.cv.clientWidth || this.baseW, cssH = this.cv.clientHeight || this.baseH;
+      if (this.cv.clientWidth && this.cv.clientHeight) { this.baseW = cssW; this.baseH = cssH; }
+      const dpr = this.cv.clientWidth ? Math.min(root.devicePixelRatio || 1, 2) : 1;
+      const size = Q ? Q.backingSize(cssW, cssH, dpr, this.qualityTier) : [cssW, cssH];
+      if (this.cv.width !== size[0]) this.cv.width = size[0];
+      if (this.cv.height !== size[1]) this.cv.height = size[1];
+      return size;
     }
     _setPalette(id) {
       const gl = this.gl, key = P.paletteId(id);
@@ -128,16 +139,21 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
       const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, VS)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, HEAD + (FX[id] || FX.gradient) + TAIL));
       gl.bindAttribLocation(p, 0, 'a_p'); gl.bindAttribLocation(p, 1, 'a_u'); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(id + ': ' + gl.getProgramInfoLog(p));
-      const U = {}; for (const n of ['T', 'H', 'B', 'O', 'A', 'K', 'ASP', 'SHIFT', 'MODE', 'P0', 'P1', 'P2', 'E0', 'E1', 'XF', 'PALETTE']) U[n] = gl.getUniformLocation(p, n);
+      const U = {}; for (const n of ['T', 'H', 'B', 'O', 'A', 'K', 'ASP', 'SHIFT', 'QUALITY', 'MODE', 'P0', 'P1', 'P2', 'E0', 'E1', 'XF', 'PALETTE']) U[n] = gl.getUniformLocation(p, n);
       return (this.progs[id] = { p, U });
     }
     // triangles for a shape, with texture coordinates running 0..1 across its bounding box
     _geometry(r) {
-      const key = JSON.stringify(r.pts); let g = this.geo.get(r.id);
-      if (g && g.key === key) return g;
+      const gl = this.gl; let g = this.geo.get(r.id), same = !!g && g.pts.length === r.pts.length;
+      if (same) for (let i = 0; i < r.pts.length; i++) if (g.pts[i][0] !== r.pts[i][0] || g.pts[i][1] !== r.pts[i][1]) { same = false; break; }
+      if (same) return g;
+      if (g && g.buffer && g.buffer !== this.buf) gl.deleteBuffer(g.buffer);
       const [x0, y0, x1, y1] = P.bbox(r.pts), w = Math.max(x1 - x0, 1e-4), h = Math.max(y1 - y0, 1e-4), v = [];
       for (const tri of P.triangulate(r.pts)) for (const i of tri) { const [x, y] = r.pts[i]; v.push(x, y, (x - x0) / w, 1 - (y - y0) / h); }
-      g = { key, data: new Float32Array(v), n: v.length / 4, asp: w / h };
+      const data = new Float32Array(v), buffer = gl.createBuffer() || this.buf;
+      if (!buffer) { this.error = 'Lumen could not allocate graphics memory for a mapped shape.'; return { n: 0 }; }
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, data, buffer === this.buf ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+      g = { pts: r.pts.map((p) => [p[0], p[1]]), buffer, data: buffer === this.buf ? data : null, n: v.length / 4, asp: w / h };
       this.geo.set(r.id, g); return g;
     }
     // audio: the feature object from av-features.js (or an older { bass, mid, treble, level, beat } frame), or null.
@@ -155,7 +171,7 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
       const outAsp = this.cv.width / this.cv.height, regions = project.regions;
       if (EVO && this._eoSrc !== (project.evolve || null)) { this._eoSrc = project.evolve || null; this._eo = { ...EVO.normSettings(project.evolve), xf: (project.evolve && project.evolve.xf) || 'auto' }; }
       const eo = this._eo || { xf: 'auto' };
-      gl.enable(gl.BLEND); gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+      gl.enable(gl.BLEND);
       for (let ri = 0; ri < regions.length; ri++) {
         const r = regions[ri];
         if (r.hidden || r.opacity <= 0) continue;
@@ -186,7 +202,8 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
         // the animation's own clock: music can speed it up, but it never jumps
         this.clock[r.id] = (fresh ? 0 : this.clock[r.id] || 0) + dt * st.speed * st.c.speedK;
         const mode = r.blend === 'add' ? 1 : r.blend === 'screen' ? 2 : 0;
-        gl.bufferData(gl.ARRAY_BUFFER, g.data, gl.DYNAMIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, g.buffer);
+        if (g.buffer === this.buf) gl.bufferData(gl.ARRAY_BUFFER, g.data, gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
         if (mode === 0) gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); else if (mode === 1) gl.blendFunc(gl.ONE, gl.ONE); else gl.blendFunc(gl.ONE_MINUS_DST_COLOR, gl.ONE);
@@ -198,7 +215,10 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
           this._draw(r.preset, r, st, g, outAsp, mode, st.a, audio, k, ctl, E, st.xf, st.k, 2, st.hueOff);
         } else this._draw(r.preset, r, st, g, outAsp, mode, st.a, audio, k, ctl, E, 0, 1, 0, st.hueOff);
       }
-      if (this.geo.size > regions.length + 20) for (const id of [...this.geo.keys()]) if (!regions.some((r) => r.id === id)) { this.geo.delete(id); delete this.clock[id]; delete this.st[id]; }
+      if (this.geo.size > regions.length + 20) for (const [id, g] of this.geo) {
+        let alive = false; for (let i = 0; i < regions.length; i++) if (regions[i].id === id) { alive = true; break; }
+        if (!alive) { if (g.buffer && g.buffer !== this.buf) gl.deleteBuffer(g.buffer); this.geo.delete(id); delete this.clock[id]; delete this.st[id]; }
+      }
     }
     // music controls + evolution, scaled by the visual intensity, into a reused array (no allocation per frame)
     _mix(dst, ctl, ev, eo) {
@@ -211,7 +231,7 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
       gl.useProgram(pr.p);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.paletteTex); gl.uniform1i(pr.U.PALETTE, 0);
       gl.uniform1f(pr.U.T, this.clock[r.id]); gl.uniform1f(pr.U.H, (st.hue * Math.PI) / 180 + hueOff); gl.uniform1f(pr.U.B, st.bright); gl.uniform1f(pr.U.O, r.opacity);
-      gl.uniform1f(pr.U.A, a); gl.uniform1f(pr.U.K, audio ? this.beat * react : 0); gl.uniform1f(pr.U.ASP, g.asp * outAsp); gl.uniform1f(pr.U.SHIFT, st.hue / 360); gl.uniform1i(pr.U.MODE, mode);
+      gl.uniform1f(pr.U.A, a); gl.uniform1f(pr.U.K, audio ? this.beat * react : 0); gl.uniform1f(pr.U.ASP, g.asp * outAsp); gl.uniform1f(pr.U.SHIFT, st.hue / 360); gl.uniform1f(pr.U.QUALITY, Q ? Q.SCALE[this.qualityTier] : 0.75); gl.uniform1i(pr.U.MODE, mode);
       gl.uniform4f(pr.U.P0, ctl[0], ctl[1], ctl[2], ctl[3]); gl.uniform4f(pr.U.P1, ctl[4], ctl[5], ctl[6], ctl[7]); gl.uniform4f(pr.U.P2, ctl[8], ctl[9], ctl[10], ctl[11]);
       gl.uniform4f(pr.U.E0, E[0], E[1], E[2], E[3]); gl.uniform4f(pr.U.E1, E[4], E[5], E[6], E[7]); gl.uniform4f(pr.U.XF, xf, xk, role, 0);
       gl.drawArrays(gl.TRIANGLES, 0, g.n);
