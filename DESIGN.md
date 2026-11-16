@@ -35,7 +35,7 @@ Primary families are editorial groups; shared helper techniques may appear acros
 | Family | Current IDs | Assessment and direction |
 | --- | --- | --- |
 | Flow | `aurora`, `fire`, `smoke`, `clouds`, `ocean`, `waves`, `flow`, `lava`, `rain`, `snow`, `rays` | Rebuilt with distinct large-scale movement: layered curtain bands, rising flame, lifted smoke, broad cloud masses, crossing water caustics, wall-wide wave crests, warped current bands, slow magma cells, falling rain streaks, drifting flakes, and sun shafts. `ocean`/`waves` now have separate water-surface and traveling-crest structures. Remaining flow-versus-ink distinction still needs a visual check. |
-| Particles | `stars`, `particles`, `bokeh`, `fireflies`, `magic` | Several are repeated hash-grid dots. Rebuild as distinct depth, streaming, soft-focus, organic drift, and orbiting trails. Keep counts deterministic and quality-scaled. |
+| Particles | `stars`, `particles`, `bokeh`, `fireflies`, `magic` | Rebuilt as depth-layered star drift, directional particle streams, ten soft-focus bokeh lights, sixteen gently breathing fireflies, and counter-orbiting motes with ribbons. Fixed loops are bounded at sixteen or fewer; actual GPU cost remains unmeasured. |
 | Geometry | `warp`, `portal`, `energy`, `fractal`, `kaleido`, `tunnel`, `synth`, `rings`, `laser`, `disco`, `hex` | Preserve the recognizable shapes but improve edge stability, motion pacing, and restrained palettes. `portal`/`tunnel`/`rings` currently share radial emphasis; give them separate framing and movement. |
 | Noise fields | `galaxy`, `nebula`, `plasma`, `ink` | Share a tested noise/palette foundation but preserve distinct silhouettes: spiral arms, broad luminous clouds, smooth energy bands, and pigment-like blooms. Reduce unbounded color mixing and high-frequency shimmer. |
 | Reactive | `lightning` | Make onset/beat events clear but brief, clamp brightness, and ensure silent playback settles to a slow non-flashing idle. Reuse this feature mapping for reactive accents in other families. |
@@ -86,6 +86,7 @@ Keep Projection Lights' snapshot/restore path and provider rate limits intact. K
 ### 3. Rebuild families
 - [x] Add the saved shared-palette selector to Visuals and upload one reusable palette texture to the shared shader. Hardware-free tests cover texture bytes, cyclic endpoints, project selection persistence, and source wiring; this does not verify GLSL compilation or appearance.
 - [x] Rebuild the 11 Flow shaders while keeping their saved IDs. Hardware-free tests confirm each shader source uses the shared palette and audio controls; the common profile checks cover audio response and silence bounds for all 35 IDs. GLSL compilation and appearance are still unverified.
+- [x] Rebuild the 5 Particle shaders with deterministic, bounded loops and distinct motion forms. Hardware-free tests check palette/audio wiring and constant loop bounds; GLSL compilation and appearance are still unverified.
 - Update current shaders family by family, keeping IDs and existing project behavior loadable. After each family, test shader inventory/migration and the shared audio contract; visually review sample captures before calling a look successful.
 
 ### 4. Add new animations and transitions

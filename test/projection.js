@@ -122,6 +122,13 @@ async function main() {
     assert(shader.includes('pal('), `${id} uses the shared palette`);
     assert(/\b(A|SWELL|EMIT|TURB|SHIM)\b/.test(shader), `${id} responds through shared audio controls`);
   }
+  for (const id of ['stars', 'particles', 'bokeh', 'fireflies', 'magic']) {
+    const marker = `${id}: \``; const start = renderSource.indexOf(marker) + marker.length, end = renderSource.indexOf('`', start), shader = renderSource.slice(start, end);
+    assert(start >= marker.length && end > start, `${id} particle shader source remains present`);
+    assert(shader.includes('pal(') && /\b(A|SWELL|EMIT|TURB|SHIM)\b/.test(shader), `${id} uses shared palette and audio controls`);
+    const bounds = [...shader.matchAll(/for\(int\s+\w+=\d+;\s*\w+<([0-9]+);/g)].map((m) => +m[1]);
+    assert(bounds.length > 0 && Math.max(...bounds) <= 16, `${id} uses a bounded small shader loop`);
+  }
   const editorSource = fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8');
   assert(editorSource.includes('data-palette') && editorSource.includes('pj.cur.palette = PJ.paletteId(t.value)'), 'Visuals tab persists the selected shared palette');
   const grouped = PJ.GROUPS.flatMap((g) => g[1]);

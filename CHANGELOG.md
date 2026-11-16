@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased (2026-11-16)
+- Projection Studio: rebuild the five Particle animations as layered star drift, streaming trails, soft-focus bokeh, slow fireflies, and orbital motes/ribbons; bound their repeated shader loops.
 - Projection Studio: rebuild the 11 Flow animations with distinct curtains, flame, smoke, clouds, caustic water, crossing waves, currents, magma cells, falling rain, drifting snow, and sun shafts. Existing animation IDs and saved layouts remain compatible.
 - Projection Studio: add a saved shared-palette selector to Visuals and feed a reusable, seamless palette texture into the common shader. Brightness is applied after palette mapping, per-shape Colour shift offsets the palette, and context restoration retains the selected palette.
 - Projection Studio: add shared palette definitions and OKLab sampling, bounded audio-feature semantics, and an animation-ID compatibility resolver with hardware-free coverage. This shared-logic step preceded the shader integration recorded above.
