@@ -38,7 +38,7 @@ async function fxCaptureStart() {
     throw new Error(fx.cfg.source === 'mic' ? `Lumen could not open the microphone (${why}). Check Windows Settings → Privacy → Microphone.` : `Lumen could not start listening to this PC's sound (${why}).`);
   }
   const at = stream.getAudioTracks();
-  if (!at.length) { stream.getTracks().forEach((t) => t.stop()); throw new Error('Windows did not hand over an audio track, so there is nothing to react to.'); }
+  if (!at.length || at[0].readyState === 'ended') { stream.getTracks().forEach((t) => t.stop()); throw new Error('No system-audio track was provided. On macOS 15 or later, allow Screen & System Audio Recording for Lumen and choose a screen in the system picker; otherwise choose Microphone.'); }
   const ctx = new AudioContext(); try { await ctx.resume(); } catch {}
   const analyser = ctx.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.55;
   ctx.createMediaStreamSource(new MediaStream(at)).connect(analyser); // analysed only: never played back or recorded

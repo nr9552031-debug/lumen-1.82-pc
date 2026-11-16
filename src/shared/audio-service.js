@@ -65,9 +65,9 @@
           : await env.media.getDisplayMedia({ video: { width: { max: 320 }, height: { max: 180 }, frameRate: { max: 5 } }, audio: true });
       } catch (e) { const x = new Error(`Lumen could not start listening (${(e && e.name) || 'error'}: ${(e && e.message) || 'refused'}).`); x.refused = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError'); throw x; }
       const at = stream.getAudioTracks();
-      if (!at.length) {
+      if (!at.length || at[0].readyState === 'ended') {
         stream.getTracks().forEach((t) => t.stop());
-        const x = new Error(source === 'mic' ? 'The microphone gave no sound track.' : 'The system did not hand over a sound track (on a Mac, system sound cannot be captured: choose Microphone on the Audio tab).'); x.noTrack = true; throw x;
+        const x = new Error(source === 'mic' ? 'The microphone gave no sound track.' : 'The system did not hand over a sound track. On macOS 15 or later, allow Screen & System Audio Recording for Lumen and choose a screen in the system picker; otherwise choose Microphone.'); x.noTrack = true; throw x;
       }
       return { stream, track: at[0] };
     }

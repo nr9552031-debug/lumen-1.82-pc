@@ -173,16 +173,16 @@ app.whenReady().then(() => {
   // source, otherwise in the app's data folder.
   diag.setFile(path.join(process.env.PORTABLE_EXECUTABLE_DIR || (app.isPackaged ? app.getPath('userData') : app.getAppPath()), 'lumen-diagnostics.log'));
   diag.log('app', `Lumen ${app.getVersion()} started`);
-  // Effects: when the app's own page asks to capture the display, hand it the primary screen plus the PC's sound
-  // output ("loopback", Windows only). Nothing is recorded or sent anywhere; the page only measures loudness and colour.
+  // Effects and Projection Studio share one display-audio request. Windows gets Chromium loopback; on macOS 15+
+  // Electron's native picker handles screen and system-audio permission/capture. Nothing is recorded or sent anywhere.
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     const deny = () => { try { callback(null); } catch { try { callback({}); } catch {} } };
     if (!win || win.isDestroyed() || request.frame !== win.webContents.mainFrame) return deny();
     desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } }).then((sources) => {
       if (!sources.length) { diag.log('fx', 'no screen source available for capture'); return deny(); }
-      callback(process.platform === 'win32' ? { video: sources[0], audio: 'loopback' } : { video: sources[0] }); // system-sound loopback is Windows-only here
+      callback(process.platform === 'win32' ? { video: sources[0], audio: 'loopback' } : { video: sources[0] });
     }).catch((e) => { diag.log('fx', `capture sources failed: ${e.message}`); deny(); });
-  });
+  }, { useSystemPicker: process.platform === 'darwin' });
   wire(); createWindow(); buildTray();
   if (startHidden && !tray) win.minimize();
   automation.start();
