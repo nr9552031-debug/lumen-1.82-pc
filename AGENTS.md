@@ -22,6 +22,15 @@ The owner does NOT write code. They use the app, report problems and pitch ideas
 5. Run `npm test`. Open a PR that says what changed, how it was checked, and `Closes #<number>`.
 6. Update `TASKS.md` (status and next steps) so the next agent, possibly a different tool, can pick up with no other context.
 
+## Platforms: Windows and Mac are both first-class
+- Every change must work on Windows AND macOS. CI runs `npm test` on both, and `.github/workflows/build.yml` builds the Windows exe/installer and the Mac dmg (Run workflow in the Actions tab).
+- Do not add OS-specific code without a check on `process.platform` and a working path (or a clear message) for the other OS.
+- Use `path` and `os` helpers, never hard-coded `\\` or `/` separators or Windows-only shell commands.
+- Secrets use Electron `safeStorage` (DPAPI on Windows, Keychain on Mac). Do not bypass it.
+- Known gap: system-sound capture (the "loopback" in `src/main/main.js`) is Windows-only; Mac falls back to the microphone. Closing this gap is welcome, but say what needs a real Mac check.
+- Mac needs the Local Network permission for WiZ; keep the in-app hint in `providers/wiz.js` accurate.
+- In every PR, state what was verified on each OS and what still needs the owner to try on a real machine.
+
 ## Rules
 - Cync, Hubspace and WiZ integrations are reverse-engineered. Never log passwords, emails or tokens.
 - Cync certificate pinning behaviour in the README is deliberate. Do not weaken it.

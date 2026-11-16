@@ -1,11 +1,16 @@
 name: test
+# Runs the same tests on Windows and macOS (plus Linux) so a change can't break one platform silently.
 on:
   push:
     branches: [main]
   pull_request:
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: Lumen-1.8.2-source-for-PC/Lumen-1.8.2

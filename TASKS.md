@@ -10,6 +10,7 @@
 ## Next up
 - Run `npm test` on a clean checkout and record the result here.
 - Triage open GitHub issues.
+- Mac parity: add system-sound capture on macOS (currently Windows-only); confirm Mac build from the build workflow launches.
 
 ## Notes for the next agent
 - (add handoff notes here at the end of each session)
