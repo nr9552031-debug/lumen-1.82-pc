@@ -2,6 +2,11 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (layout persistence)
+- Fixed a debounce race that could redirect a pending shape/layout save to the newly selected project. Saves now capture per-project snapshots, coalesce edits for the same project, and flush before deletion.
+- `node test/projection.js` passes the edit-coalescing and cross-layout save checks as well as the existing projection cases. `npm test` still stops after that test at the WiZ fixture bind error; syntax checks and `git diff --check` pass.
+- Next: continue reviewing per-shape settings and Play/Stop restore lifecycle; interactive UI is still unavailable because Electron aborts before opening.
+
 ### 2026-11-15 Codex (Projection Studio follow-up)
 - Fixed the macOS Projection Studio audio path: the Audio tab now identifies system audio as unavailable on Mac and automatically switches to Microphone when macOS supplies no system audio track. The fallback decision is covered for Mac, Windows, explicit microphone selection, and permission refusal in `test/projection.js`.
 - `node test/projection.js`, syntax checks, and `git diff --check` pass. Full `npm test` still stops at the WiZ fixture bind error; real microphone permission/capture on Mac remains unverified.
@@ -27,6 +32,7 @@ Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else
 ## Build / test state
 - VERIFIED (local, 2026-11-15): `node test/projection.js` passed the saved-project normalization/round-trip and restore-after-provider-failure checks.
 - VERIFIED (local, 2026-11-15): `node test/projection.js` passed the platform fallback policy checks for macOS no-track fallback, Windows unchanged behavior, explicit microphone selection, and permission refusal.
+- VERIFIED (local, 2026-11-15): `node test/projection.js` passed layout-save coalescing and cross-layout snapshot checks, covering the renderer's save-queue policy.
 - UNVERIFIED: the full `npm test` suite cannot complete on this host. Its projection test passes, but the WiZ fixture cannot bind `127.0.0.70:38899` (`EPERM` in the sandbox and `EADDRNOTAVAIL` outside it).
 - UNVERIFIED: app launch; after `npm ci`, `npm start` exits with `SIGABRT` before the Studio UI is visible. The stack trace did not identify the cause.
 - VERIFIED (GitHub Actions run on main, commit 0e06276): the 3 WiZ simulated-bulb tests (wiz-caps, wiz-errors, wiz-multi) pass on Windows, macOS and Linux.

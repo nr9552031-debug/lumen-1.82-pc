@@ -7,10 +7,23 @@ const path = require('path');
 const vm = require('vm');
 const PJ = require('../src/shared/proj-core');
 const PJA = require('../src/shared/proj-audio');
+const { createSaveQueue } = require('../src/shared/proj-save');
 const { createApi } = require('../src/main/api');
 const { ProjLights } = require('../src/main/projlights');
 
 async function main() {
+  // Debounced writes keep the edited layout attached to its own captured state across quick switches.
+  const writes = [], ownerA = { id: '' }, ownerB = { id: 'saved-b' };
+  const saveQueue = createSaveQueue(async (p) => { writes.push(p); return { id: p.id || 'new-a' }; }, (owner, saved) => { owner.id = saved.id; }, () => {}, 60000);
+  saveQueue.queue(ownerA, { id: '', name: 'First layout', regions: [{ id: 'a' }] });
+  saveQueue.queue(ownerA, { id: '', name: 'First layout edited', regions: [{ id: 'a', hue: 170 }] });
+  saveQueue.queue(ownerB, { id: 'saved-b', name: 'Second layout', regions: [{ id: 'b' }] });
+  await saveQueue.flush();
+  assert.strictEqual(writes.length, 2, 'pending writes are coalesced per edited project');
+  assert.strictEqual(writes[0].name, 'First layout edited', 'the latest shape changes are captured');
+  assert.strictEqual(writes[1].name, 'Second layout', 'switching layouts does not redirect a pending save');
+  assert.strictEqual(ownerA.id, 'new-a', 'the new layout id is assigned to its owner');
+
   // Verify every animation in the picker has a matching shader and is placed in exactly one picker group.
   const renderWindow = {
     LumenProj: PJ,

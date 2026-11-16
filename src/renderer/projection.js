@@ -11,6 +11,11 @@ const PJD = window.LumenDirector, PJF = window.LumenFeatures, PJS = window.Lumen
 const pjSel = () => pj.cur && pj.cur.regions.find((r) => r.id === pj.sel);
 const pjLights = () => S.devices.filter((d) => d.online !== false && d.caps && (d.caps.color || d.caps.dim || d.caps.temp));
 const pjActiveIds = () => pjLights().map((d) => d.id).filter((id) => !pj.cur.lights.exclude.includes(id));
+const pjSaveQueue = LumenProjSave.createSaveQueue(
+  (project) => call('proj:save', project),
+  (owner, saved) => { owner.id = saved.id; if (pj.list && !pj.list.some((p) => p.id === saved.id)) pj.list.push(owner); if (pj.cur === owner) pjBar(); },
+  (error, owner) => { pj.err = error.message; if (pj.cur === owner) pjStatus(); },
+);
 
 /* ---------- data ---------- */
 async function pjInit() {
@@ -23,7 +28,7 @@ async function pjInit() {
   const st = await call('proj:status'); pj.out = st.output; pj.running = st.lights.active;
   if (window.lumen.onProj) window.lumen.onProj((s) => { pj.out = s; pjBar(); });
 }
-const pjSave = debounce(async () => { if (!pj.cur) return; const saved = await call('proj:save', pj.cur); if (!pj.cur.id) { pj.cur.id = saved.id; pj.list.push(pj.cur); pjBar(); } }, 700);
+const pjSave = () => { if (pj.cur) pjSaveQueue.queue(pj.cur, pj.cur); };
 // What is shown: the saved project, or in Autonomous mode a live copy with the director's choices on top.
 const pjView = () => (pj.cur.mode === 'auto' && pj.live ? pj.live : pj.cur);
 function pjLive() {
@@ -322,9 +327,9 @@ function pjWire() {
       if (act === 'project' && d && d.primary && !await confirmBox('Project on this screen?', 'The projection will cover this screen, including Lumen. Press Esc to close it.', 'Project')) return;
       pj.out = await call('proj:open', { displayId: pj.display, windowed: act === 'window' }); pjPush(); setTimeout(pjPush, 600); pjBar(); return pjStatus(); }
     if (act === 'close') { pj.out = await call('proj:close'); pjBar(); return pjStatus(); }
-    if (act === 'new') { const n = await ask('New room layout', 'New room'); if (n) pjOpen(PJ.project({ name: n })); pjSave(); return; }
+    if (act === 'new') { const n = await ask('New room layout', 'New room'); if (n) { pjOpen(PJ.project({ name: n })); pjSave(); } return; }
     if (act === 'rename') { const n = await ask('Rename layout', pj.cur.name); if (n) { pj.cur.name = n; pjBar(); pjSave(); } return; }
-    if (act === 'delete') { if (!await confirmBox('Delete layout', `Delete “${pj.cur.name}” and all its shapes?`, 'Delete')) return; await call('proj:delete', pj.cur.id); pj.list = pj.list.filter((p) => p !== pj.cur); return pjOpen(pj.list[0] || PJ.project({ name: 'My room' })); }
+    if (act === 'delete') { if (!await confirmBox('Delete layout', `Delete “${pj.cur.name}” and all its shapes?`, 'Delete')) return; await pjSaveQueue.flush(); await call('proj:delete', pj.cur.id); pj.list = pj.list.filter((p) => p !== pj.cur); return pjOpen(pj.list[0] || PJ.project({ name: 'My room' })); }
     if (act === 'starter') { const b = a.getBoundingClientRect(); return popup(PJ.STARTERS.map((s) => ({ label: s.name, run: () => { pjOpen(PJ.project({ name: s.name, regions: s.regions.map((x) => ({ ...x, id: PJ.uid() })) })); pjSave(); } })), b.left, b.bottom, a); }
     if (act === 'undo') return pjUndo();
     if (act === 'randall') { pjSnap(); pj.cur.regions.forEach(rnd); return pjChanged(true); }
