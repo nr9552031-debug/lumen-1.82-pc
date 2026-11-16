@@ -130,6 +130,19 @@ async function main() {
   await lights.stop();
   assert.strictEqual(restores.length, 1, 'Stop still attempts to restore a dropped bulb');
   assert.deepStrictEqual(restores[0], { ids: ['bulb-1'], patch: { on: true, brightness: 37, rgb: [12, 34, 56] } });
+
+  const zeroBrightness = { id: 'zero', brand: 'wiz', name: 'Dim bulb', online: true, on: true, brightness: 0, rgb: [10, 20, 30], mode: 'color', caps: { color: true, dim: true } };
+  const zeroRestores = [];
+  const zeroManager = {
+    devices: new Map([[zeroBrightness.id, zeroBrightness]]), providers: { wiz: { fast: () => {} } },
+    _normalize: (_dev, p) => p, _emit: () => {},
+    apply: async (ids, patch) => { zeroRestores.push({ ids, patch }); return { ok: 1, failed: 0 }; },
+  };
+  const zeroLights = new ProjLights({ manager: zeroManager, now: () => 3000 });
+  zeroLights.start(); zeroLights.frame({ zero: { rgb: [200, 100, 50], bri: 75 } });
+  zeroBrightness.rgb[0] = 240; // the snapshot must not alias mutable device colour state
+  await zeroLights.stop();
+  assert.deepStrictEqual(zeroRestores[0].patch, { on: true, brightness: 0, rgb: [10, 20, 30] }, 'restore retains zero brightness and an independent original RGB snapshot');
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('projection: project persistence and dropped-bulb restore passed');
 }

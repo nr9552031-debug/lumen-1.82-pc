@@ -2,6 +2,11 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (snapshot fidelity)
+- Made Projection Lights snapshots clone their RGB state and retain brightness `0` during restore; previously the saved colour could alias device state and a zero value was omitted from the restore patch.
+- `node test/projection.js` passes a zero-brightness and mutated-device-colour restore check; syntax passes. `npm test` continues past Projection checks and hits the WiZ fixture bind restriction.
+- Next: review CI and continue projector/output and mode lifecycle checks; actual provider state recovery remains hardware-dependent.
+
 ### 2026-11-15 Codex (shutdown retry)
 - Updated native quit/close cleanup to retry Projection Lights restoration whenever saved bulb snapshots remain, including after an earlier failed Stop.
 - `node --check src/main/main.js` and `node test/projection.js` pass; `npm test` still passes Projection tests and stops at the WiZ fixture bind restriction.

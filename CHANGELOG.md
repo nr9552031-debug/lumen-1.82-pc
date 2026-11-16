@@ -9,6 +9,7 @@
 - Projection Studio: keep delayed room-photo imports attached to the layout that selected the file.
 - Projection Studio: ignore beat-scheduled shape changes after switching away from their layout or removing the shape.
 - Projection Studio: retry retained bulb restores during app shutdown, even when no show is active.
+- Projection Studio: preserve independent RGB snapshots and zero brightness values when restoring bulbs.
 - Add hardware-free checks for Projection Studio project persistence and restore after output failures.
 - Check that every picker animation has a shader, each animation belongs to one group, and all page script references exist.
 - Correct the README animation count to the 35 presets provided by the current code.

@@ -6,8 +6,8 @@ const { clamp } = require('./util');
 const { RATE } = require('./fx');
 const diag = require('./diag');
 const { createScheduler } = require('../shared/av-sched');
-const snapOf = (d) => ({ on: d.on, brightness: d.brightness, rgb: d.rgb, mode: d.mode, kelvin: d.kelvin });
-const patchOf = (s) => s.on === false ? { on: false } : { on: true, ...(s.brightness ? { brightness: s.brightness } : {}), ...(s.mode === 'color' && s.rgb ? { rgb: s.rgb } : s.kelvin ? { kelvin: s.kelvin } : {}) };
+const snapOf = (d) => ({ on: d.on, brightness: d.brightness, rgb: Array.isArray(d.rgb) ? [...d.rgb] : d.rgb, mode: d.mode, kelvin: d.kelvin });
+const patchOf = (s) => s.on === false ? { on: false } : { on: true, ...(s.brightness !== undefined && s.brightness !== null ? { brightness: s.brightness } : {}), ...(s.mode === 'color' && s.rgb ? { rgb: [...s.rgb] } : s.kelvin ? { kelvin: s.kelvin } : {}) };
 
 class ProjLights {
   // latencyOf(id) / intervalOf(id): the per-bulb timing profiles shared with Lightshow (measured or estimated, plus
