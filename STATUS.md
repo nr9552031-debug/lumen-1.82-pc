@@ -2,6 +2,12 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (animation overhaul milestone 1)
+- Pulled latest `main`, read the required instructions/status docs, inspected current `proj-core.js`, `proj-render.js`, projector page, and audio feature contract. Researched MilkDrop/projectM, Butterchurn, procedural SDF/noise/palettes, flow noise, boids, and Gray-Scott.
+- Added DESIGN.md with the current 35-animation family inventory, weak-overlap assessment, saved-ID migration rules, common palette/audio contract, Windows/Mac compatibility, adaptive quality plan, milestones 2–5, and visual verification requirements. Added THIRD_PARTY.md; no code/assets/dependencies were imported.
+- `npm test` runs and passes `test/projection.js`, then fails before WiZ tests can run because this host rejects binding `127.0.0.70:38899` (`EPERM`). `git diff --check` passes. This milestone contains no runtime code changes.
+- Unfinished: implementation has not started. Next: push this design milestone, then milestone 2 shared palette, normalized audio mapping and migration helpers with deterministic tests. Cross-platform tests and visual GPU checks remain necessary.
+
 ### 2026-11-15 Claude (versions)
 - Added scripts/ci-version.js and build.yml steps so every build on main is versioned automatically (next build should be 1.8.3). UNVERIFIED until the build finishes; check the release title and file names.
 ### 2026-11-15 Codex (merged audit)
