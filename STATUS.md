@@ -2,6 +2,11 @@
 Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-16 Codex (animation overhaul milestone 3 Flow family)
+- Rebuilt the 11 Flow shaders with separate forms for curtains, flame, smoke, clouds, caustic water, traveling waves, currents, magma cells, falling rain, drifting snow, and sun shafts. All keep their old preset IDs and receive the shared palette, per-shape controls, and common audio controls.
+- `node --check src/shared/proj-render.js` and `node --check test/projection.js` pass. `node test/projection.js` passes checks that all 11 flow shader sources use the shared palette/audio controls and all 35 animation profiles stay bounded, react to music energy, and suppress hit/drop bursts in silence. `npm test` again fails after the Projection test at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). No GLSL compiler or GPU run is available; no look or frame-rate claim is verified.
+- Next: rebuild particles, then geometry/noise/reactive/ambient families. Need an owner eye-check on Mac and PC.
+
 ### 2026-11-16 Codex (animation overhaul milestone 3 palette integration)
 - Connected the saved project palette to a selector in Visuals and a reusable 256×1 texture in the shared WebGL shader. All shader output now receives the selected palette before brightness; the per-shape Colour shift offsets it, and context restoration retains the selected palette. Existing layout IDs and shape settings are unchanged.
 - `node test/projection.js` and syntax checks for the touched JavaScript pass. Tests cover bounded RGBA texture creation, opaque samples, seamless palette endpoints, all animation IDs, and palette UI/renderer source wiring. `npm test` passes the Projection test and then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). `npm start` exits with Electron `SIGABRT` before showing a window. These checks do not compile GLSL or verify appearance on a GPU.
@@ -83,6 +88,7 @@ Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else
 - VERIFIED (local, 2026-11-15): `node test/projection.js` passed layout-save coalescing and cross-layout snapshot checks, covering the renderer's save-queue policy.
 - VERIFIED (local, 2026-11-15): `node test/projection.js` confirmed Stop waits for an in-flight simulated cloud update before restoring the original bulb state, including concurrent Stop calls.
 - UNVERIFIED: the full `npm test` suite cannot complete on this host. Its projection test passes, but the WiZ fixture cannot bind `127.0.0.70:38899` (`EPERM` in the sandbox and `EADDRNOTAVAIL` outside it).
+- VERIFIED (local, 2026-11-16): `node test/projection.js` checked all 35 preset profile outputs for bounded controls, increased speed under music energy, and zero hit/drop events in silence; it also checked the 11 rebuilt Flow shader sources for shared palette/audio-control wiring. These are CPU/source checks, not GLSL compilation or appearance evidence.
 - UNVERIFIED: app launch; after `npm ci`, `npm start` exits with `SIGABRT` before the Studio UI is visible. The stack trace did not identify the cause.
 - VERIFIED (GitHub Actions run on main, commit 0e06276): the 3 WiZ simulated-bulb tests (wiz-caps, wiz-errors, wiz-multi) pass on Windows, macOS and Linux.
 - VERIFIED (same run): `npm run dist` and `npm run dist:mac` both produced artifacts (Windows installer + portable exe; Mac arm64/x64 dmg + zip), published to the `latest` release.

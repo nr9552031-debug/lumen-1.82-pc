@@ -39,6 +39,16 @@ async function main() {
   assert.strictEqual(PJ.audioFeature(drive, 'drop'), 1, 'drop is a normalized event pulse');
   assert.strictEqual(PJ.audioFeature({ ...drive, bass: 2 }, 'bass'), 1, 'feature values are clamped');
   assert.strictEqual(PJ.audioFeature({ ...drive, silent: true }, 'hit'), 0, 'silence suppresses transient controls');
+  const fullDrive = { sub: 0.7, bass: 0.9, lowMid: 0.8, mid: 0.75, highMid: 0.7, treble: 0.65, rms: 0.8, centroid: 0.6, flux: 0.7, impulse: 0.8, onsetStrength: 0.8, energy: 0.9, trend: 0.5, beat: true, beatStrength: 0.9, drop: true };
+  for (const id of PJ.PRESET_IDS) {
+    const live = PJ.newControls();
+    for (let i = 0; i < 4; i++) PJ.controls(id, fullDrive, 0.12, live, 1);
+    assert(live.speedK > 1, `${id} shared profile speeds up from music energy`);
+    assert(live.out.every((v, i) => Number.isFinite(v) && v >= (i === 4 ? -1 : 0) && v <= 1), `${id} profile output stays within shader bounds`);
+    const quiet = PJ.newControls(); PJ.controls(id, { silent: true }, 0.12, quiet, 1);
+    assert.strictEqual(quiet.out[8], 0, `${id} has no hit pulse while silent`);
+    assert.strictEqual(quiet.out[11], 0, `${id} has no drop burst while silent`);
+  }
 
   // Debounced writes keep the edited layout attached to its own captured state across quick switches.
   const writes = [], ownerA = { id: '' }, ownerB = { id: 'saved-b' };
@@ -106,6 +116,12 @@ async function main() {
   vm.runInNewContext(renderSource, { window: renderWindow, console });
   assert(renderSource.includes('uniform sampler2D PALETTE') && renderSource.includes('P.palettePixels(key, 256)'), 'shared renderer uploads the normalized shared palette for its GLSL shader');
   assert(renderSource.includes('uniform1f(pr.U.SHIFT, st.hue / 360)') && renderSource.includes('fract(rawL+SHIFT+TINT*.08)'), 'shape colour shift continues to move through the selected palette');
+  for (const id of ['aurora', 'fire', 'smoke', 'clouds', 'ocean', 'waves', 'flow', 'lava', 'rain', 'snow', 'rays']) {
+    const marker = `${id}: \``; const start = renderSource.indexOf(marker) + marker.length, end = renderSource.indexOf('`', start), shader = renderSource.slice(start, end);
+    assert(start >= marker.length && end > start, `${id} flow shader source remains present`);
+    assert(shader.includes('pal('), `${id} uses the shared palette`);
+    assert(/\b(A|SWELL|EMIT|TURB|SHIM)\b/.test(shader), `${id} responds through shared audio controls`);
+  }
   const editorSource = fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8');
   assert(editorSource.includes('data-palette') && editorSource.includes('pj.cur.palette = PJ.paletteId(t.value)'), 'Visuals tab persists the selected shared palette');
   const grouped = PJ.GROUPS.flatMap((g) => g[1]);
