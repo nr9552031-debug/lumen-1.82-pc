@@ -2,6 +2,11 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (merged audit)
+- Merged `codex/projection-studio-audit` as PR #4 into `main` after the latest commit passed GitHub Actions on Ubuntu, macOS, and Windows. The merge is `75e1f1815c9050f09ff1c6282aa7ded210add857`.
+- `node test/projection.js`, syntax checks, and `git diff --check` pass locally. `npm test` locally is blocked by the WiZ fixture bind to `127.0.0.70:38899` (`EPERM`); GitHub CI passed the full workflow on all three OSes.
+- Next: owner hands-on verification of projector/preview/Esc, saved layouts and shape settings, Mac microphone fallback, PC system audio, and bulbs restoring after Stop, disconnection/retry, and app quit. Interactive verification is still unavailable here because Electron aborts before opening.
+
 ### 2026-11-15 Codex (snapshot fidelity)
 - Made Projection Lights snapshots clone their RGB state and retain brightness `0` during restore; previously the saved colour could alias device state and a zero value was omitted from the restore patch.
 - `node test/projection.js` passes a zero-brightness and mutated-device-colour restore check; syntax passes. `npm test` continues past Projection checks and hits the WiZ fixture bind restriction.
