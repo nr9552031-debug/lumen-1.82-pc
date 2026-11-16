@@ -1,6 +1,10 @@
 # CHANGELOG
 
 ## Unreleased (2026-11-16)
+- Add TouchDesigner Studio: connect through the official TDMCP Streamable HTTP MCP server with OAuth 2.1/PKCE, dynamically discover tools, and use local Ollama tool calling to inspect/build/iterate TouchDesigner networks. Gate all non-read-only tools behind per-call approval, flag Python execution/deletion as high risk, and support cancellation, logs, current project info and embedded output image preview. TDMCP remains user-installed and is not bundled due to its Shared Use License. Add the official MCP SDK and local policy/installation documentation.
+- Add a hardware-free TouchDesigner test for endpoint security, MCP initialization/tool discovery/invocation/disconnect, Ollama agent loop, and explicit write approval.
+- Add Technology Optimization foundation: read-only dependency inventory, manual GitHub search, saved proposals and explicit approval states. No dependency or existing feature changes. Periodic monitoring and security advisory checks remain planned.
+- Add permanent open-source-first and forward-only development rules to AGENTS.md.
 - Projection Studio: strengthen the common palette grade and saturation so animations use more vivid, psychedelic color on both preview and projector.
 - Projection Studio: add saved Low/Medium/High render quality to preview and projector, 8MP backing-canvas caps, 5/4/3-octave fBm tiers, and adaptive one-step fallback with a six-second stable recovery. New geometry buffers upload only when a mapped shape changes.
 - Projection Lights: initialize picture-following ramps from the saved live light state and cap each ordinary RGB/brightness command according to its provider interval; keep brand rate limits and Stop restoration.

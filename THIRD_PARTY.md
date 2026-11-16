@@ -1,5 +1,15 @@
 # Third-party material for Projection Studio visuals
 
+## TouchDesigner Studio
+
+- [Model Context Protocol TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk/tree/v1.x) — MIT, installed as `@modelcontextprotocol/sdk` 1.32.2 with `zod` 4.6.7. Used in the Electron main process for standards-based MCP Streamable HTTP, tool discovery/calls, and OAuth 2.1/PKCE support. No source modifications.
+- [TouchDesigner TDMCP](https://github.com/TouchDesigner/TDMCP) — external user-installed MCP server/component; its official [Shared Use License](https://github.com/TouchDesigner/TDMCP/blob/main/LICENSE.md) permits use for projects but says TDMCP itself may not be redistributed as a product. Lumen does not bundle or copy its code.
+- [Ollama](https://github.com/ollama/ollama) — local user-installed model runtime accessed through the documented HTTP API; no Ollama dependency or code copied.
+
+The SDK installation added 78 packages in npm's reported installation tree. An owner-approved `npm audit --json` reported 18 dependency advisories (4 moderate, 13 high, 1 critical), including transitive `tar` and existing Electron/electron-builder components. Suggested fixes require major upgrades to existing build/runtime dependencies. No automatic fixes or unrelated dependency updates were applied; see STATUS.md and KNOWN_ISSUES.md.
+
+## Projection Studio research
+
 ## Research only; no imported code or assets
 
 The animation redesign is informed by these open-source projects and public graphics references. This milestone does not add a dependency, source file, shader, preset, or image from them.
