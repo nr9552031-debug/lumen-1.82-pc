@@ -15,5 +15,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - name: macOS loopback aliases for the simulated WiZ bulbs (127.0.0.x)
+        if: runner.os == 'macOS'
+        run: for i in $(seq 2 100); do sudo ifconfig lo0 alias 127.0.0.$i up; done
       - run: npm ci
       - run: npm test
