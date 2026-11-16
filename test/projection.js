@@ -148,6 +148,12 @@ async function main() {
   const lightningMarker = 'lightning: `', lightningStart = renderSource.indexOf(lightningMarker) + lightningMarker.length, lightningEnd = renderSource.indexOf('`', lightningStart), lightningShader = renderSource.slice(lightningStart, lightningEnd);
   assert(lightningShader.includes('HIT') && lightningShader.includes('DROP') && lightningShader.includes('K') && lightningShader.includes('trigger=clamp'), 'lightning is driven by bounded audio events');
   assert(!lightningShader.includes('floor(t*') && !lightningShader.includes('fract(t*'), 'lightning has no periodic idle flash timer');
+  for (const id of ['gradient', 'glow', 'sunset']) {
+    const marker = `${id}: \``; const start = renderSource.indexOf(marker) + marker.length, end = renderSource.indexOf('`', start), shader = renderSource.slice(start, end);
+    assert(start >= marker.length && end > start, `${id} ambient shader source remains present`);
+    assert(shader.includes('pal(') && /\b(A|SWELL|EMIT|TURB|SHIM)\b/.test(shader), `${id} uses shared palette and audio controls`);
+    assert(!shader.includes('h1('), `${id} ambient shader avoids random-looking hash speckles`);
+  }
   const editorSource = fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8');
   assert(editorSource.includes('data-palette') && editorSource.includes('pj.cur.palette = PJ.paletteId(t.value)'), 'Visuals tab persists the selected shared palette');
   const grouped = PJ.GROUPS.flatMap((g) => g[1]);

@@ -1,6 +1,6 @@
 # Projection Studio animation overhaul
 
-Status: milestones 1 and 2 are complete; milestone 3 has started. Shared palette data/sampling, audio-feature normalization, and preset ID resolution are implemented in `proj-core.js`. The Visuals tab now saves a shared palette choice and the common WebGL 1 shader reads it. Family rebuilds remain unfinished; palette shader compilation and appearance are not verified on a GPU.
+Status: milestones 1–3 are complete; milestone 4 is next. All 35 existing preset IDs have rebuilt shader structures, with shared palette selection and audio controls connected. Saved IDs and project fields remain compatible. Hardware-free source/profile checks pass, but GLSL compilation, appearance, and GPU performance are not verified.
 
 ## What exists today
 
@@ -30,7 +30,7 @@ No source code, shaders, preset files, or artwork from these projects is being c
 
 ## Current animation inventory and treatment
 
-Primary families are editorial groups; shared helper techniques may appear across families. No existing preset is dropped. Existing stable IDs remain loadable and keep their current behavior until their family milestone lands.
+Primary families are editorial groups; shared helper techniques may appear across families. No existing preset is dropped or renamed. Stable IDs remain loadable while their shader implementations receive the planned family treatments.
 
 | Family | Current IDs | Assessment and direction |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ Primary families are editorial groups; shared helper techniques may appear acros
 | Geometry | `warp`, `portal`, `energy`, `fractal`, `kaleido`, `tunnel`, `synth`, `rings`, `laser`, `disco`, `hex` | Rebuilt as warped current bands, a defined portal aperture, pulsing perimeter rails, capped Julia escape field, mirrored mandala, perspective tunnel grid, synth horizon, centered expanding ripples, slow beam fans, rotating facets, and honeycomb pulses. Portal/tunnel/rings now use different spatial structures. |
 | Noise fields | `galaxy`, `nebula`, `plasma`, `ink` | Rebuilt around distinct spiral arms/stars, broad domain-warped nebula veils, low-frequency plasma interference, and thresholded pigment pools with marbled edges. Each uses the shared palette and bounded fBm sampling; GPU cost remains unmeasured. |
 | Reactive | `lightning` | Rebuilt as a stable branching bolt that only blooms from bounded onset, beat, or drop controls. Silence keeps a dim palette field with no periodic strike timer. |
-| Ambient | `gradient`, `glow`, `sunset` | Keep slow, low-contrast room-friendly scenes; make the selected palette consistent and avoid an unintended rainbow drift. |
+| Ambient | `gradient`, `glow`, `sunset` | Rebuilt as a low-contrast spatial gradient, two slowly breathing soft light pools, and a palette-based horizon/sun/reflection. These shaders contain no hash-speckle layer; GPU appearance still needs review. |
 
 There are 35 IDs in this inventory. The table intentionally describes current names, not final picker labels. New effects are additive: **Wall Tide** (long waves crossing the entire mapped region), **Ripple Choir** (overlapping bass-seeded SDF ripples), **Ribbon Weave** (highlights carried along a curl-like flow), **Murmuration** (boids-inspired particle streams), **Frame Drips** (gravity-driven drips attached to the mapped shape's upper edge), **Cell Garden** (soft-union metaball clusters), and **Reaction Bloom** (optional low-resolution Gray-Scott texture with fallback). Final names and grouping will be checked in a rendered picker before release.
 
@@ -90,7 +90,8 @@ Keep Projection Lights' snapshot/restore path and provider rate limits intact. K
 - [x] Rebuild the 11 Geometry shaders with distinct SDF/polar/tile structures. The fractal iteration cap is reduced from 40 to 28; hardware-free tests check palette/audio wiring and loop bounds, not GLSL compilation or appearance.
 - [x] Rebuild the 4 Noise Field shaders with spiral, cloud, interference, and pigment structures. Hardware-free tests check shared palette/audio source wiring; GLSL compilation and appearance are still unverified.
 - [x] Rebuild Lightning as an event-triggered bolt with a quiet idle. Hardware-free tests check beat/onset/drop feature mapping and confirm the shader no longer has a periodic flash timer; appearance is still unverified.
-- Update current shaders family by family, keeping IDs and existing project behavior loadable. After each family, test shader inventory/migration and the shared audio contract; visually review sample captures before calling a look successful.
+- [x] Rebuild the 3 Ambient shaders as slow, restrained room scenes using the shared palette.
+- [x] Rebuild all 35 existing preset IDs family by family while keeping their saved IDs and project data compatible. Source/audio checks pass; visual captures and GPU verification remain outstanding.
 
 ### 4. Add new animations and transitions
 - Add Wall Tide, Ripple Choir, Ribbon Weave, Murmuration, Frame Drips, and Cell Garden; add Reaction Bloom only if its fallback and GPU cost are acceptable. Add picker preview names and animation-to-shader coverage tests.

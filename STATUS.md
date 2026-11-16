@@ -2,6 +2,11 @@
 Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-16 Codex (animation overhaul milestone 3 Ambient family)
+- Rebuilt Gradient as a steady spatial wash, Glow as two slowly breathing soft pools, and Sunset as a palette-based sky, sun, cloud band, and water reflection. The ambient shaders no longer add random-looking hash speckles. All 35 existing preset IDs now have family rebuilds; no preset or saved layout field was removed.
+- `node --check src/shared/proj-render.js` and `node --check test/projection.js` pass. `node test/projection.js` verifies palette/audio wiring and no hash speckles in these three ambient shaders, plus source/profile checks from the other families. `npm test` passes Projection checks, then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). Shader compile, GPU performance, and appearance remain unverified.
+- Next: add new animations and transition treatments (milestone 4). Keep all by-eye review and Windows/Mac GPU checks on the owner’s list.
+
 ### 2026-11-16 Codex (animation overhaul milestone 3 Reactive family)
 - Rebuilt Lightning as a deterministic branching bolt that appears only on beat, onset, or drop signals. Removed the old time-driven strike timer that flashed even during silence; intensity is clamped and the quiet background remains palette-driven.
 - `node --check src/shared/proj-render.js` and `node --check test/projection.js` pass. `node test/projection.js` verifies onset/beat/drop profile values and confirms Lightning has no periodic idle flash timer. `npm test` passes Projection checks, then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). No GPU appearance check is available.
@@ -113,6 +118,7 @@ Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else
 - VERIFIED (local, 2026-11-16): `node test/projection.js` checks palette/audio wiring and constant loop bounds for all 11 rebuilt Geometry shaders, including the 28-iteration fractal cap; this does not compile or render them.
 - VERIFIED (local, 2026-11-16): `node test/projection.js` checks shared palette/audio source wiring for the 4 rebuilt Noise Field shaders; this is not GLSL compilation or rendered appearance.
 - VERIFIED (local, 2026-11-16): `node test/projection.js` verifies the Lightning feature profile receives beat/onset/drop events and the shader has no time-based flash timer; it does not render the shader.
+- VERIFIED (local, 2026-11-16): `node test/projection.js` checks palette/audio source wiring and absence of hash-speckle code in the 3 rebuilt Ambient shaders. It does not compile or render GLSL.
 - UNVERIFIED: app launch; after `npm ci`, `npm start` exits with `SIGABRT` before the Studio UI is visible. The stack trace did not identify the cause.
 - VERIFIED (GitHub Actions run on main, commit 0e06276): the 3 WiZ simulated-bulb tests (wiz-caps, wiz-errors, wiz-multi) pass on Windows, macOS and Linux.
 - VERIFIED (same run): `npm run dist` and `npm run dist:mac` both produced artifacts (Windows installer + portable exe; Mac arm64/x64 dmg + zip), published to the `latest` release.
