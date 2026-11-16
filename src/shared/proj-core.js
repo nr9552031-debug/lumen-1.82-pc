@@ -27,6 +27,58 @@
     ['Party', ['rings', 'laser', 'disco', 'synth', 'hex', 'tunnel', 'energy', 'particles', 'magic', 'kaleido', 'fractal']],
   ];
   const PRESET_IDS = PRESETS.map((p) => p[0]);
+  // Saved animation IDs are part of the project format. Retarget an old name here if a later
+  // overhaul replaces it; until then every current ID resolves to itself.
+  const PRESET_ALIASES = Object.freeze(Object.fromEntries(PRESET_IDS.map((id) => [id, id])));
+  const presetId = (id) => PRESET_ALIASES[id] || (PRESET_IDS.includes(id) ? id : 'galaxy');
+
+  // Curated neighboring hues keep the palette transitions clear on a wall. Stops are sRGB hex.
+  const PALETTES = Object.freeze({
+    aurora: Object.freeze(['#07172b', '#176c70', '#63d39b', '#b6d7ef']),
+    ember: Object.freeze(['#160d26', '#842943', '#ee693a', '#ffd08a']),
+    tide: Object.freeze(['#06162b', '#075d83', '#24b2bb', '#d2f3df']),
+    dusk: Object.freeze(['#19153b', '#5b4c8b', '#b96682', '#f1b98b']),
+    mono: Object.freeze(['#08111f', '#3b4d62', '#a8bacb', '#f5f4eb']),
+  });
+  const PALETTE_IDS = Object.freeze(Object.keys(PALETTES));
+  const paletteId = (id) => PALETTES[id] ? id : 'aurora';
+  const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const linear = (x) => x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  const srgb = (x) => x <= 0.0031308 ? 12.92 * x : 1.055 * Math.max(0, x) ** (1 / 2.4) - 0.055;
+  // OKLab interpolation is deterministic and avoids the gray midpoint of many direct RGB blends.
+  function toLab(rgb) {
+    const [r, g, b] = rgb.map(linear);
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+  }
+  function fromLab([L, a, b]) {
+    const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+    const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+    const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+    return [srgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s), srgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s), srgb(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s)].map((v) => clamp(v, 0, 1));
+  }
+  function paletteColor(id, phase) {
+    const stops = PALETTES[paletteId(id)], n = Number(phase), t = Number.isFinite(n) ? clamp(n, 0, 1) : 0;
+    const x = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), k = x - i;
+    const a = toLab(hexRgb(stops[i])), b = toLab(hexRgb(stops[i + 1]));
+    return fromLab(a.map((v, j) => v + (b[j] - v) * k));
+  }
+
+  // Bounded audio semantics shared by profiles and tests. `body`, `air`, and `hit` are
+  // derived from the existing analyzer so old saves need no migration.
+  function audioFeature(F, key) {
+    if (!F || F.silent) return 0;
+    if (key === 'body') return clamp(((Number(F.lowMid) || 0) + (Number(F.mid) || 0)) * 0.5, 0, 1);
+    if (key === 'air') return clamp(((Number(F.highMid) || 0) + (Number(F.treble) || 0)) * 0.5, 0, 1);
+    if (key === 'hit') return clamp(Math.max(Number(F.onsetStrength) || 0, F.beat ? (Number(F.beatStrength) || 0.5) : 0, Number(F.impulse) || 0), 0, 1);
+    if (key === 'beat') return F.beat ? 1 : 0;
+    if (key === 'drop') return F.drop ? 1 : 0;
+    const n = Number(F[key]);
+    if (!Number.isFinite(n)) return 0;
+    return key === 'trend' ? clamp(n, -1, 1) : clamp(n, 0, 1);
+  }
 
   /* ---------- how each animation is performed by the music (1.7) ----------
      A profile maps audio features (from av-features.js) to visual controls the shaders understand:
@@ -85,8 +137,8 @@
     const P = PROFILES[id] || PROFILES.gradient, out = st.out, k = clamp(amount == null ? 1 : amount, 0, 2);
     for (let i = 0; i < 8; i++) {
       const name = CTRL[i], w = P[name]; let target = 0;
-      if (w && F && !F.silent) for (const f in w) target += w[f] * (F[f] || 0);
-      target = name === 'spin' ? clamp(target * k * (F && F.trend < 0 ? -1 : 1), -1, 1) : clamp(target * k, 0, 1);
+      if (w && F && !F.silent) for (const f in w) target += w[f] * audioFeature(F, f);
+      target = name === 'spin' ? clamp(target * k * (audioFeature(F, 'trend') < 0 ? -1 : 1), -1, 1) : clamp(target * k, 0, 1);
       const [a, r] = EASE[name], cur = st.v[i]; st.v[i] = cur + (target - cur) * (1 - Math.exp(-dt * 1000 / (Math.abs(target) > Math.abs(cur) ? a : r)));
     }
     if (F && F.beat && P.shock) { st.shockR = 0; st.shockA = Math.max(st.shockA, clamp(P.shock * (F.beatStrength || 0.5) * k, 0, 1)); }
@@ -159,13 +211,13 @@
   function region(o = {}) {
     const pts = (Array.isArray(o.pts) ? o.pts : []).filter((p) => Array.isArray(p) && p.length === 2).slice(0, 64).map((p) => [num(p[0], -0.5, 1.5, 0.5), num(p[1], -0.5, 1.5, 0.5)]);
     return { id: str(o.id, 40) || uid(), name: str(o.name, 40, 'Shape'), surface: str(o.surface, 40, 'Main wall'), pts: pts.length >= 3 ? pts : shape('rect'),
-      preset: PRESET_IDS.includes(o.preset) ? o.preset : 'galaxy', speed: num(o.speed, 0, 4, 1), hue: num(o.hue, 0, 360, 0), bright: num(o.bright, 0, 2, 1), opacity: num(o.opacity, 0, 1, 1),
+      preset: presetId(o.preset), speed: num(o.speed, 0, 4, 1), hue: num(o.hue, 0, 360, 0), bright: num(o.bright, 0, 2, 1), opacity: num(o.opacity, 0, 1, 1),
       blend: BLENDS.includes(o.blend) ? o.blend : 'normal', react: num(o.react, 0, 1, 0.5), band: ['bass', 'mid', 'treble', 'level'].includes(o.band) ? o.band : 'bass',
       lights: (Array.isArray(o.lights) ? o.lights : []).filter((x) => typeof x === 'string').slice(0, 50), hidden: !!o.hidden };
   }
   function project(o = {}) {
     const L = o.lights || {}, A = o.audio || {};
-    return { id: str(o.id, 40), name: str(o.name, 60, 'New room'), regions: (Array.isArray(o.regions) ? o.regions : []).slice(0, 60).map(region),
+    return { id: str(o.id, 40), name: str(o.name, 60, 'New room'), regions: (Array.isArray(o.regions) ? o.regions : []).slice(0, 60).map(region), palette: paletteId(o.palette),
       lights: { mode: LIGHT_MODES.some((m) => m[0] === L.mode) ? L.mode : 'off', brightness: num(L.brightness, 5, 100, 80), sensitivity: num(L.sensitivity, 0.3, 3, 1), smooth: num(L.smooth, 0, 0.95, 0.6),
         exclude: (Array.isArray(L.exclude) ? L.exclude : []).filter((x) => typeof x === 'string').slice(0, 200),
         custom: Object.fromEntries(Object.entries(L.custom && typeof L.custom === 'object' ? L.custom : {}).filter(([, v]) => ['match', 'ambient', 'music', 'immersive', 'off'].includes(v)).slice(0, 200)) },
@@ -220,6 +272,6 @@
   // dominant hue of each animation (radians, measured from rendered frames; null = mostly grey), used to keep colour
   // continuity when one animation changes into another
   const HUES = {"galaxy":-0.74,"stars":-1.2,"nebula":2.15,"aurora":-1.65,"warp":-1.96,"fire":0.9,"smoke":null,"clouds":-2.17,"ocean":-1.84,"waves":-2.65,"portal":null,"energy":-0.83,"lightning":-1.14,"magic":1.88,"particles":1.43,"plasma":1.29,"fractal":2.57,"kaleido":3.11,"tunnel":-1.87,"gradient":-0.87,"glow":0.96,"flow":-1.49,"lava":0.85,"ink":2.24,"bokeh":1.13,"fireflies":2.33,"rays":-2.33,"rain":-1.81,"snow":-1.94,"sunset":-0.02,"synth":0.15,"rings":1.69,"laser":1.92,"disco":1.71,"hex":-1.05};
-  const api = { MODES, XF, HUES, PRESETS, PRESET_IDS, GROUPS, PROFILES, CTRL, newControls, controls, BLENDS, LIGHT_MODES, STYLES, STARTERS, uid, pointInPoly, triangulate, bbox, centre, moved, rotated, scaled, shape, region, project, lightTargets };
+  const api = { MODES, XF, HUES, PRESETS, PRESET_IDS, PRESET_ALIASES, presetId, PALETTES, PALETTE_IDS, paletteId, paletteColor, audioFeature, GROUPS, PROFILES, CTRL, newControls, controls, BLENDS, LIGHT_MODES, STYLES, STARTERS, uid, pointInPoly, triangulate, bbox, centre, moved, rotated, scaled, shape, region, project, lightTargets };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LumenProj = api;
 })(typeof window !== 'undefined' ? window : globalThis);

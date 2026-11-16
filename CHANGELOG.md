@@ -1,7 +1,8 @@
 # CHANGELOG
-- Projection Studio: document the researched animation overhaul, six current visual families, saved-preset compatibility, shared visual/audio contract, performance policy, new effect concepts, and open-source research/licenses in DESIGN.md and THIRD_PARTY.md. No runtime code or dependencies changed.
 
 ## Unreleased (2026-11-15)
+- Projection Studio: add shared palette definitions and OKLab sampling, bounded audio-feature semantics, and an animation-ID compatibility resolver with hardware-free coverage. Existing shaders are unchanged pending the family rebuild.
+- Projection Studio: document the researched animation overhaul, six current visual families, saved-preset compatibility, shared visual/audio contract, performance policy, new effect concepts, and open-source research/licenses in DESIGN.md and THIRD_PARTY.md. No runtime code or dependencies changed.
 - Projection Studio: keep the pre-show bulb snapshot when a light is dropped after repeated output failures, allowing Stop to restore it.
 - Projection Studio: prevent a replaced projector window's close event from clearing the new window state.
 - Projection Studio: explain that macOS system audio is unavailable and switch to the microphone when no system audio track is supplied.

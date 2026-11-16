@@ -12,6 +12,28 @@ const { createApi } = require('../src/main/api');
 const { ProjLights } = require('../src/main/projlights');
 
 async function main() {
+  // Palette samples are finite, clamped sRGB values; all legacy saved animation IDs resolve.
+  assert.strictEqual(PJ.PALETTE_IDS.length, 5, 'the shared visual palette set is available');
+  for (const id of PJ.PALETTE_IDS) for (const phase of [-2, 0, 0.25, 0.5, 0.75, 1, 2]) {
+    const rgb = PJ.paletteColor(id, phase);
+    assert.strictEqual(rgb.length, 3);
+    assert(rgb.every((v) => Number.isFinite(v) && v >= 0 && v <= 1), `${id} palette sample stays in sRGB range`);
+  }
+  assert.deepStrictEqual(PJ.paletteColor('not-a-palette', 0), PJ.paletteColor('aurora', 0), 'unknown palettes migrate to a safe default');
+  for (const id of PJ.PRESET_IDS) assert.strictEqual(PJ.presetId(id), id, `${id} keeps resolving for existing layouts`);
+  assert.strictEqual(PJ.presetId('unknown-preset'), 'galaxy', 'unknown preset data has a safe fallback');
+  assert.strictEqual(PJ.project({}).palette, 'aurora', 'older projects receive the shared palette default');
+  assert.strictEqual(PJ.project({ palette: 'ember' }).palette, 'ember', 'saved palette selection round-trips');
+
+  const drive = { sub: 0.3, bass: 0.8, lowMid: 0.2, mid: 0.6, highMid: 0.4, treble: 0.9, onsetStrength: 0.7, beat: true, beatStrength: 0.5, impulse: 0.2, drop: true, trend: -0.4 };
+  assert.strictEqual(PJ.audioFeature(drive, 'bass'), 0.8, 'bass remains available to animation profiles');
+  assert.strictEqual(PJ.audioFeature(drive, 'body'), 0.4, 'body combines low mids and mids');
+  assert.strictEqual(PJ.audioFeature(drive, 'air'), 0.65, 'air combines high mids and treble');
+  assert.strictEqual(PJ.audioFeature(drive, 'hit'), 0.7, 'hit responds to onset, beat, and impulse');
+  assert.strictEqual(PJ.audioFeature(drive, 'drop'), 1, 'drop is a normalized event pulse');
+  assert.strictEqual(PJ.audioFeature({ ...drive, bass: 2 }, 'bass'), 1, 'feature values are clamped');
+  assert.strictEqual(PJ.audioFeature({ ...drive, silent: true }, 'hit'), 0, 'silence suppresses transient controls');
+
   // Debounced writes keep the edited layout attached to its own captured state across quick switches.
   const writes = [], ownerA = { id: '' }, ownerB = { id: 'saved-b' };
   const saveQueue = createSaveQueue(async (p) => { writes.push(p); return { id: p.id || 'new-a' }; }, (owner, saved) => { owner.id = saved.id; }, () => {}, 60000);

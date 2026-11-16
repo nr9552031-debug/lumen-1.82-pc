@@ -2,6 +2,11 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (animation overhaul milestone 2)
+- Added five curated shared palettes with bounded OKLab interpolation, optional saved project palette normalization, a central animation-ID resolver, and allocation-free bounded feature reads for shader control profiles. Existing saves keep their preset IDs and receive the `aurora` palette default.
+- `node test/projection.js` passes palette range/fallback, old-ID resolution, project default/round-trip, and bass/body/air/hit/drop/silence mapping checks; `node --check src/shared/proj-core.js` passes. `npm test` then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). No live shader or picker consumes the new palette yet.
+- Next: publish this shared-logic milestone; milestone 3 integrates palette uniforms and rebuilds the animation families. Still need Windows/Mac GPU, projector appearance, 1080p/4K performance, and light-rate checks.
+
 ### 2026-11-15 Codex (animation overhaul milestone 1)
 - Pulled latest `main`, read the required instructions/status docs, inspected current `proj-core.js`, `proj-render.js`, projector page, and audio feature contract. Researched MilkDrop/projectM, Butterchurn, procedural SDF/noise/palettes, flow noise, boids, and Gray-Scott.
 - Added DESIGN.md with the current 35-animation family inventory, weak-overlap assessment, saved-ID migration rules, common palette/audio contract, Windows/Mac compatibility, adaptive quality plan, milestones 2–5, and visual verification requirements. Added THIRD_PARTY.md; no code/assets/dependencies were imported.
@@ -81,6 +86,7 @@ Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else
 
 ## Gaps found
 - Projection Studio has not yet had a full interactive run. Multi-display/fullscreen behavior, Esc close, WebGL rendering, and real bulb state restoration still need hands-on verification.
+- The new palette and audio helpers are unit-tested but not connected to GLSL or the picker yet; the visual family overhaul and quality adaptation are unfinished, and no animation appearance/performance result is verified.
 - Projection Studio cannot guarantee a failed provider restore until the bulb is reachable again. The snapshot is now retained and a retry is exposed; real reconnect and retry behavior is unverified here.
 - Native app quit and window-close restoration paths have code changes and hardware-free ordering coverage, but Electron's local SIGABRT prevents runtime verification of the actual app shutdown sequence.
 - macOS still does not provide system sound capture. Projection Studio now switches to Microphone if its system source produces no audio track; actual microphone capture and permission handling need a real-Mac check. Effects still requires the user to choose Microphone manually.
