@@ -101,15 +101,22 @@ function projOpen({ displayId, windowed }) {
   if (projWin && !projWin.isDestroyed()) projWin.destroy();
   const all = screen.getAllDisplays(), d = all.find((x) => String(x.id) === String(displayId)) || screen.getPrimaryDisplay(), b = d.bounds;
   const webPreferences = { preload: path.join(__dirname, 'preload-proj.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false };
-  projWin = new BrowserWindow(windowed
+  const opened = new BrowserWindow(windowed
     ? { webPreferences, x: b.x + 60, y: b.y + 60, width: 960, height: 540, backgroundColor: '#000', title: 'Lumen projection (preview)', icon: ICON, autoHideMenuBar: true }
     : { webPreferences, x: b.x, y: b.y, width: b.width, height: b.height, frame: false, fullscreen: true, backgroundColor: '#000', title: 'Lumen projection', icon: ICON, skipTaskbar: false, alwaysOnTop: true });
-  const wc = projWin.webContents;
-  projWin.setMenu(null);
+  projWin = opened;
+  const wc = opened.webContents;
+  opened.setMenu(null);
   projWin.loadFile(path.join(__dirname, '..', 'renderer', 'projector.html'));
   wc.on('will-navigate', (e) => e.preventDefault()); wc.setWindowOpenHandler(() => ({ action: 'deny' }));
   wc.once('did-finish-load', () => { if (projLast) wc.send('proj:state', projLast); });
-  projWin.on('closed', () => { projWin = null; send('proj:output', { open: false }); });
+  opened.on('closed', () => {
+    // Reopening on another display destroys the old window first. Its close event must not clear
+    // the reference to the replacement window or tell the editor that output has stopped.
+    if (projWin !== opened) return;
+    projWin = null;
+    send('proj:output', { open: false });
+  });
   send('proj:output', { open: true });
   diag.log('proj', `output opened ${windowed ? 'windowed' : 'fullscreen'} ${b.width}x${b.height}`);
   return projState();

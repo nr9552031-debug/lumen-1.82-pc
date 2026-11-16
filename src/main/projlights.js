@@ -89,7 +89,14 @@ class ProjLights {
     if (typeof prov.fast === 'function') { try { prov.fast(dev, p); } catch {} return; }
     l.busy = true; const t0 = this.now();
     Promise.resolve().then(() => prov.setState(dev, p)).then(() => { l.fails = 0; this.sched.observe(id, this.now() - t0); }, (e) => {
-      if (e.authExpired || ++l.fails >= 4) { this.dropped.push({ id, name: dev.name, reason: e.message }); this.lights.delete(id); this.snapshot.delete(id); this.sched.remove(id); diag.log('proj', `dropped ${dev.brand} light: ${e.message}`); }
+      if (e.authExpired || ++l.fails >= 4) {
+        this.dropped.push({ id, name: dev.name, reason: e.message });
+        this.lights.delete(id);
+        // Keep the original snapshot until stop(): even a bulb we can no longer drive must get its
+        // pre-show state back if it becomes reachable again before the show ends.
+        this.sched.remove(id);
+        diag.log('proj', `dropped ${dev.brand} light: ${e.message}`);
+      }
     }).finally(() => { l.busy = false; });
   }
   async stop({ restore = true } = {}) {

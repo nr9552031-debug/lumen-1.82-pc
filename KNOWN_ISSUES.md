@@ -1,4 +1,10 @@
 # KNOWN ISSUES
+- Projection Studio light sync discarded a bulb's original state when repeated output failures dropped that bulb from active sync. Fixed in `src/main/projlights.js`; evidence: `node test/projection.js` injected four provider failures and confirmed Stop still attempted to restore the original on/brightness/colour state.
+- Reopening Projection Studio output could let the old window's `closed` event clear the replacement window reference. The handler now checks window identity; source syntax passes `node --check`, but reopening on real displays remains unverified without an Electron run.
+- README previously said there were 21 Projection Studio animations; the current preset list contains 35. README count now matches `LumenProj.PRESET_IDS.length` (35).
+- Projection Studio's Audio tab still offers system sound capture on Mac. The main process supplies loopback audio only on Windows, so on Mac the user must select Microphone. Needs a Mac-specific UI/fallback fix and real-Mac verification.
+- Local `npm test` is blocked in this environment by the WiZ simulator loopback address: it fails binding `127.0.0.70:38899` (`EPERM` sandboxed; `EADDRNOTAVAIL` unsandboxed). The hardware-free Projection Studio test passes independently.
+- `npm start` was attempted but Electron is not installed in this checkout (`electron: command not found`); interactive Studio behavior has not yet been observed here.
 - Mac: system-sound capture for Effects is unavailable (Windows-only loopback in src/main/main.js); Mac falls back to the microphone.
 - Mac: the first build (identity null, no signature) showed "Lumen is damaged and can't be opened" on the owner's Mac (reported 2026-11-15). Workaround: `xattr -cr /Applications/Lumen.app`. Fix attempted: `mac.identity` set to "-" (ad-hoc signing) in package.json; UNVERIFIED until the next release build is tried on a Mac. Even when fixed the app is not notarized, so first launch needs right-click > Open. Windows build is unsigned too (SmartScreen may warn).
 - `npm test` currently covers only the 3 WiZ tests; other test files are missing from the repo.
