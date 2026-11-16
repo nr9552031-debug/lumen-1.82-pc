@@ -7,6 +7,7 @@ const Proj = require('../shared/proj-core');
 const Core = require('../shared/show-core');
 const { ProjLights } = require('./projlights');
 const { createShowApi } = require('./showapi');
+const { createTechnologyOptimization } = require('./technology-optimization');
 
 function createApi({ manager, store, fx, automation, diag, platform }) {
   const { wiz, hubspace, cync } = manager.providers;
@@ -35,8 +36,18 @@ function createApi({ manager, store, fx, automation, diag, platform }) {
   ].join('\n');
 
   const showApi = createShowApi({ manager, store, fx, projLights, platform });
+  const technologyOptimization = createTechnologyOptimization({ store, projectDir: platform.projectDir });
   return {
     ...showApi,
+    ...technologyOptimization,
+    'td:status': () => platform.touchDesigner.snapshot(),
+    'td:config': (patch) => platform.touchDesigner.saveConfig(patch),
+    'td:connect': () => platform.touchDesigner.connect(),
+    'td:disconnect': () => platform.touchDesigner.disconnect(),
+    'td:models': () => platform.touchDesigner.models(),
+    'td:run': (prompt, model) => platform.touchDesigner.run(prompt, model),
+    'td:approve': (runId, approved) => platform.touchDesigner.approveTool(runId, approved),
+    'td:stop': () => platform.touchDesigner.stopRun(),
     state: () => manager.snapshot(),
     scan: () => manager.scan(),
     // patch {on:true} alone honours the "switch on at" default, if the user enabled one

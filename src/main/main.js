@@ -11,12 +11,13 @@ const { CyncProvider } = require('./providers/cync');
 const { FxEngine } = require('./fx');
 const { Automation } = require('./automation');
 const { createApi, cleanFrame } = require('./api');
+const { TouchDesigner } = require('./touchdesigner');
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
 const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
 const startHidden = process.argv.includes('--hidden');
-let win, manager, store, fx, automation, tray = null, quitting = false;
+let win, manager, store, fx, automation, touchDesigner, tray = null, quitting = false;
 
 function stopDrivers() {
   const pl = manager && manager.projLights, sp = manager && manager.showPlayer;
@@ -89,6 +90,7 @@ async function quit() {
   quitting = true;
   const busy = stopDrivers();
   if (busy.length) await Promise.allSettled(busy);
+  if (touchDesigner) await touchDesigner.disconnect().catch(() => {});
   app.quit();
 }
 // "Start with Windows". For the portable build the real .exe is the one the user launched, not the unpacked copy.
@@ -132,6 +134,7 @@ const displays = () => { const prim = screen.getPrimaryDisplay().id; return scre
 
 const platform = {
   displays, projOpen, projClose, projState,
+  projectDir: app.getAppPath(),
   version: app.getVersion(),
   runtime: `Electron ${process.versions.electron} | ${process.platform} ${process.arch}`,
   portable: !!process.env.PORTABLE_EXECUTABLE_DIR,
@@ -178,6 +181,9 @@ function wire() {
 
 app.whenReady().then(() => {
   store = createStore();
+  touchDesigner = new TouchDesigner({ store, openExternal: (url) => shell.openExternal(url), version: app.getVersion() });
+  platform.touchDesigner = touchDesigner;
+  touchDesigner.on('status', (s) => send('tdmcp:status', s));
   manager = new Manager(store, { wiz: new WizProvider(), hubspace: new HubspaceProvider({ store }), cync: new CyncProvider({ store, opts: { allowUnverified: !!store.data.settings.cyncAllowUnverifiedTls } }) });
   fx = new FxEngine({ manager });
   automation = new Automation({ manager, store, fx });
@@ -211,6 +217,6 @@ app.on('before-quit', (e) => {
   // Native quit shortcuts (notably Cmd+Q on macOS) bypass the renderer's window-close path.
   // Hold the quit until all active lighting drivers have completed their restore sequence.
   e.preventDefault(); quitting = true;
-  Promise.allSettled(stopDrivers()).finally(() => app.quit());
+  Promise.allSettled([...stopDrivers(), touchDesigner ? touchDesigner.disconnect() : null].filter(Boolean)).finally(() => app.quit());
 });
 app.on('window-all-closed', () => app.quit());

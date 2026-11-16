@@ -2,7 +2,7 @@
 /* Window shell (menu bar, toolbar, navigation pane, status bar), the Home and Lights pages and the Properties pane. */
 const PAGES = {
   home: ['Lumen Home', 'home'], all: ['All Lights', 'bulb'], room: ['Room', 'room'], group: ['Group', 'group'], studio: ['Colour Studio', 'studio'], viz: ['Room Visualizer', 'plan'], proj: ['Projection Studio', 'proj'], show: ['Lightshow', 'show'],
-  fx: ['Audio & Effects', 'fx'], scenes: ['Scenes', 'scene'], schedules: ['Schedules', 'clock'], settings: ['Control Panel', 'cp'],
+  fx: ['Audio & Effects', 'fx'], scenes: ['Scenes', 'scene'], schedules: ['Schedules', 'clock'], technology: ['Technology Optimization', 'scan'], touchdesigner: ['TouchDesigner Studio', 'studio'], settings: ['Control Panel', 'cp'],
 };
 const go = (t, id) => { view = { t, id }; selected = null; filter = ''; render(); };
 
@@ -76,7 +76,7 @@ function renderNav() {
     box('Rooms', S.rooms.map((r) => item(view.t === 'room' && view.id === r.id, 'room', r.name, S.devices.filter((d) => d.room === r.id).length, `data-nav="room" data-id="${r.id}"`)).join('') || '<div class="nav-empty">No rooms yet</div>', 'room') +
     box('Groups', S.groups.map((g) => item(view.t === 'group' && view.id === g.id, 'group', g.name, g.deviceIds.length, `data-nav="group" data-id="${g.id}"`)).join('') || '<div class="nav-empty">No groups yet</div>', 'group') +
     box('Tools', item(view.t === 'studio', 'studio', 'Colour Studio', undefined, 'data-nav="studio"') + item(view.t === 'viz', 'plan', 'Room Visualizer', undefined, 'data-nav="viz"') + item(view.t === 'proj', 'proj', 'Projection Studio', undefined, 'data-nav="proj"') + item(view.t === 'show', 'show', 'Lightshow', undefined, 'data-nav="show"') + item(view.t === 'fx', 'fx', 'Audio & Effects', undefined, 'data-nav="fx"') +
-      item(view.t === 'schedules', 'clock', 'Schedules', undefined, 'data-nav="schedules"') + item(view.t === 'settings', 'cp', 'Control Panel', undefined, 'data-nav="settings"'));
+      item(view.t === 'schedules', 'clock', 'Schedules', undefined, 'data-nav="schedules"') + item(view.t === 'technology', 'scan', 'Technology Optimization', undefined, 'data-nav="technology"') + item(view.t === 'touchdesigner', 'studio', 'TouchDesigner Studio', undefined, 'data-nav="touchdesigner"') + item(view.t === 'settings', 'cp', 'Control Panel', undefined, 'data-nav="settings"'));
 }
 $('#nav').addEventListener('click', (e) => {
   const add = e.target.closest('[data-add]'); if (add) return add.dataset.add === 'room' ? newRoom() : newGroup();
@@ -254,7 +254,7 @@ function renderDrawer() {
 function renderContent() {
   const c = $('#content');
   if ((view.t === 'room' && !S.rooms.find((r) => r.id === view.id)) || (view.t === 'group' && !S.groups.find((g) => g.id === view.id))) view = { t: 'all' };
-  const page = { home: renderHome, studio: renderStudio, viz: renderViz, proj: renderProj, show: renderShow, fx: renderFx, scenes: renderScenes, schedules: renderSchedules, settings: renderSettings }[view.t] || renderLights;
+  const page = { home: renderHome, studio: renderStudio, viz: renderViz, proj: renderProj, show: renderShow, fx: renderFx, scenes: renderScenes, schedules: renderSchedules, technology: renderTechnologyOptimization, touchdesigner: renderTouchDesigner, settings: renderSettings }[view.t] || renderLights;
   if (c.dataset.page !== view.t + ':' + (view.id || '')) { c.dataset.page = view.t + ':' + (view.id || ''); c.innerHTML = ''; c.scrollTop = 0; }
   page(c);
 }
