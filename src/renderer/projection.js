@@ -4,24 +4,31 @@
    the lights are driven separately in the main process, so a slow bulb can never slow the picture down. */
 const PJ = window.LumenProj;
 const pj = { list: null, cur: null, sel: null, tab: 'visuals', undo: [], canvas: null, R: null, timer: null, n: 0, running: false, add: null, drag: null,
-  cap: null, feat: null, displays: [], display: '', out: { open: false }, thumbs: {}, thumbBusy: false, dom: null, regional: {}, sent: {}, err: '', sample: null, lastTargets: {},
+  cap: null, feat: null, displays: [], display: '', platform: '', out: { open: false }, thumbs: {}, thumbBusy: false, dom: null, regional: {}, sent: {}, restoreFailed: [], err: '', sample: null, lastTargets: {},
   // 1.7 audiovisual engine
   eng: null, dir: null, sched: null, ov: {}, live: null, rf: null, beatLatch: false, dropLatch: false, shownBeat: 0, cuedBeat: 0, lat: [], thumbCol: {}, next: null, last: null, adv: false, calib: null, sync: {}, fakeF: null };
 const PJD = window.LumenDirector, PJF = window.LumenFeatures, PJS = window.LumenSched;
 const pjSel = () => pj.cur && pj.cur.regions.find((r) => r.id === pj.sel);
 const pjLights = () => S.devices.filter((d) => d.online !== false && d.caps && (d.caps.color || d.caps.dim || d.caps.temp));
 const pjActiveIds = () => pjLights().map((d) => d.id).filter((id) => !pj.cur.lights.exclude.includes(id));
+const pjSaveQueue = LumenProjSave.createSaveQueue(
+  (project) => call('proj:save', project),
+  (owner, saved) => { owner.id = saved.id; if (pj.list && !pj.list.some((p) => p.id === saved.id)) pj.list.push(owner); if (pj.cur === owner) pjBar(); },
+  (error, owner) => { pj.err = error.message; if (pj.cur === owner) pjStatus(); },
+);
 
 /* ---------- data ---------- */
 async function pjInit() {
   pj.list = (await call('proj:list')).map(PJ.project);
+  const appInfo = await call('app:info');
+  pj.platform = /\|\s*darwin\b/i.test(appInfo.runtime || '') ? 'darwin' : 'other';
   pj.cur = pj.list[0] || PJ.project({ name: 'My room', regions: PJ.STARTERS[0].regions });
   pj.sel = pj.cur.regions[0] ? pj.cur.regions[0].id : null;
   pj.displays = await call('proj:displays'); const ext = pj.displays.find((d) => !d.primary); pj.display = (ext || pj.displays[0] || {}).id || '';
   const st = await call('proj:status'); pj.out = st.output; pj.running = st.lights.active;
   if (window.lumen.onProj) window.lumen.onProj((s) => { pj.out = s; pjBar(); });
 }
-const pjSave = debounce(async () => { if (!pj.cur) return; const saved = await call('proj:save', pj.cur); if (!pj.cur.id) { pj.cur.id = saved.id; pj.list.push(pj.cur); pjBar(); } }, 700);
+const pjSave = () => { if (pj.cur) pjSaveQueue.queue(pj.cur, pj.cur); };
 // What is shown: the saved project, or in Autonomous mode a live copy with the director's choices on top.
 const pjView = () => (pj.cur.mode === 'auto' && pj.live ? pj.live : pj.cur);
 function pjLive() {
@@ -81,7 +88,7 @@ function pjSample() {
 }
 async function pjPollStatus() {
   const r = await window.lumen.call('proj:status'); if (!r.ok) return;
-  pj.sent = r.data.lights.sent; pj.dropped = r.data.lights.dropped; pj.sync = r.data.lights.sync || {}; pj.cues = r.data.lights.cues || 0; if (pj.out.open !== r.data.output.open) { pj.out = r.data.output; pjBar(); }
+  pj.sent = r.data.lights.sent; pj.dropped = r.data.lights.dropped; pj.restoreFailed = r.data.lights.restoreFailed || []; pj.sync = r.data.lights.sync || {}; pj.cues = r.data.lights.cues || 0; if (pj.out.open !== r.data.output.open) { pj.out = r.data.output; pjBar(); }
   pjStatus();
 }
 
@@ -94,7 +101,19 @@ Object.defineProperties(pj, {
   eng: { get: () => SVC.engine },
   feat: { get: () => SVC.features },
 });
-async function pjAudioStart() { await SVC.start({ source: pj.cur.audio.source === 'mic' ? 'mic' : 'system' }); }
+async function pjAudioStart() {
+  const requested = pj.cur.audio.source === 'mic' ? 'mic' : 'system';
+  try { await SVC.start({ source: requested }); }
+  catch (e) {
+    const source = LumenProjAudio.fallbackSource(pj.platform, requested, e);
+    if (source === requested) throw e;
+    pj.cur.audio.source = source;
+    pj.err = 'macOS did not provide system sound, so Projection Studio switched to the microphone.';
+    await SVC.start({ source });
+    pjSave();
+    pjPanel();
+  }
+}
 function pjAudioStop() { SVC.stop(); }
 const pjAudioWanted = () => SVC.wanted || SVC.state === 'requesting';
 // Each analysis frame (from the service's own timer, 40 Hz), whatever page or tab is showing.
@@ -134,7 +153,7 @@ async function pjPlay() {
   } catch (e) { pj.err = e.message; }
   pjEnsureLoop(); pjPush(); pjBar(); pjPanel(); pjStatus();
 }
-async function pjStop() { pj.running = false; try { await call('proj:lights:stop'); } catch {} pj.lastTargets = {}; pjBar(); pjPanel(); pjStatus(); }
+async function pjStop() { pj.running = false; try { const s = await call('proj:lights:stop'); pj.restoreFailed = s.restoreFailed || []; } catch (e) { pj.err = e.message; } pj.lastTargets = {}; pjBar(); pjPanel(); pjStatus(); }
 // The light mode changed while playing: start or stop the bulb side to match.
 async function pjModeChanged() {
   if (!pj.running) return;
@@ -170,7 +189,7 @@ function pjStatus() {
   const el = $('#pjStatus'); if (!el) return;
   const mode = PJ.LIGHT_MODES.find((m) => m[0] === pj.cur.lights.mode)[1], sent = Object.keys(pj.sent || {}).filter((b) => pj.sent[b]).map((b) => `${BRANDS[b] || b} ${pj.sent[b]}`).join(', ');
   const bits = [`${pj.cur.regions.length} shape${pj.cur.regions.length === 1 ? '' : 's'}`, `Projection ${pj.out.open ? 'showing' : 'not showing'}`, `Lights: ${mode}${pj.running && pj.cur.lights.mode !== 'off' ? ` (running${sent ? ', commands sent: ' + sent : ''})` : ''}`, `Music: ${pjAudioLine()}`, `Mode: ${{ manual: 'Manual', reactive: 'Music reactive', auto: 'Autonomous' }[pj.cur.mode]}`];
-  const errs = [pj.err, pj.R && pj.R.error, ...(pj.dropped || []).map((d) => `${d.name} left the sync: ${d.reason}`)].filter(Boolean);
+  const errs = [pj.err, pj.R && pj.R.error, ...(pj.restoreFailed || []).map((d) => `${d.name} was not restored: ${d.reason}`), ...(pj.dropped || []).map((d) => `${d.name} left the sync: ${d.reason}`)].filter(Boolean);
   el.innerHTML = `<span>${bits.map(esc).join('. ')}.</span>${pj.add ? '<span class="pj-hint">Click on the stage to place each corner. Double-click to finish.</span>' : ''}${errs.map((m) => `<div class="note err" style="margin:6px 0 0"><i class="led bad"></i><span>${esc(m)}</span></div>`).join('')}`;
 }
 const pjSlider = (label, key, min, max, step, val, unit = '') => `<div class="f"><label>${label} <span class="muted" id="pjv-${key}">${esc(val + unit)}</span></label><input type="range" data-k="${key}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
@@ -198,18 +217,18 @@ function pjPanel() {
     const all = pjLights();
     el.innerHTML = `<div class="sect">What the bulbs do</div><div class="pj-modes">${PJ.LIGHT_MODES.map(([k, n, d]) => `<button class="mode ${L.mode === k ? 'on' : ''}" data-lmode="${k}"><b>${n}</b><small>${d}</small></button>`).join('')}</div>
       ${pjSlider('Brightness', 'L.brightness', 5, 100, 1, L.brightness, '%')}${pjSlider('Sensitivity', 'L.sensitivity', 0.3, 3, 0.1, L.sensitivity, '×')}${pjSlider('Smoothness of changes', 'L.smooth', 0, 0.95, 0.05, L.smooth)}
-      <div class="row pj-wrap"><button class="btn ${pj.cur.blackout ? 'on' : ''}" data-a="blackout" data-tip="Projector black, bulbs keep following">Lights only</button><button class="btn" data-a="restore" ${pj.running ? '' : 'disabled'} data-tip="Stop and put every bulb back how it was">Restore previous lighting</button></div>
+      <div class="row pj-wrap"><button class="btn ${pj.cur.blackout ? 'on' : ''}" data-a="blackout" data-tip="Projector black, bulbs keep following">Lights only</button><button class="btn" data-a="restore" ${pj.running || (pj.restoreFailed || []).length ? '' : 'disabled'} data-tip="Stop and restore every bulb; retry any failed bulb">${pj.restoreFailed && pj.restoreFailed.length ? 'Retry failed restores' : 'Restore previous lighting'}</button></div>
       <div class="sect">Bulbs taking part</div>${all.length ? `<div class="pj-list">${all.map((d) => `<div class="pj-item"><input type="checkbox" data-inc="${esc(d.id)}" ${L.exclude.includes(d.id) ? '' : 'checked'}><span>${esc(d.name)}</span><small>${BRANDS[d.brand]}${d.caps.color ? '' : ', white only'}</small>
         ${L.mode === 'custom' ? `<select data-cust="${esc(d.id)}">${[['match', 'Match'], ['ambient', 'Ambient'], ['music', 'Music'], ['immersive', 'Immersive'], ['off', 'Leave alone']].map(([k, n]) => `<option value="${k}" ${(L.custom[d.id] || 'match') === k ? 'selected' : ''}>${n}</option>`).join('')}</select>` : ''}
         ${r ? `<label class="pj-link" data-tip="This bulb takes the colour inside “${esc(r.name)}” instead of the whole picture"><input type="checkbox" data-link="${esc(d.id)}" ${r.lights.includes(d.id) ? 'checked' : ''}>follows shape</label>` : ''}</div>`).join('')}</div>
         <p class="muted pj-p">WiZ follows about 11 times a second. Cync and Hubspace go through their clouds, so they follow more slowly and smoothly. White-only bulbs follow with brightness and warmth, not colour.</p>` : '<div class="note"><span>No lights are available. Find or connect lights first.</span></div>'}`;
   } else {
-    el.innerHTML = `<div class="sect">Music response</div><div class="f"><label>Listen to</label><select data-k="A.source"><option value="system" ${A.source === 'system' ? 'selected' : ''}>What this PC is playing</option><option value="mic" ${A.source === 'mic' ? 'selected' : ''}>Microphone</option></select></div>
+    el.innerHTML = `<div class="sect">Music response</div><div class="f"><label>Listen to</label><select data-k="A.source"><option value="system" ${A.source === 'system' ? 'selected' : ''}>${pj.platform === 'darwin' ? 'System sound (microphone fallback)' : 'What this PC is playing'}</option><option value="mic" ${A.source === 'mic' ? 'selected' : ''}>Microphone</option></select></div>
       <div class="row pj-wrap">${[['subtle', 'Subtle'], ['balanced', 'Balanced'], ['intense', 'Intense']].map(([k, n]) => `<button class="btn ${A.style === k ? 'on' : ''}" data-style="${k}">${n}</button>`).join('')}</div>
       ${pjSlider('Sensitivity', 'A.sensitivity', 0.3, 3, 0.1, A.sensitivity, '×')}
       <div class="row"><button class="btn pri" id="pjListenBtn" data-a="${SVC.wanted ? 'unlisten' : 'listen'}">${SVC.wanted ? 'Stop listening' : SVC.state === 'error' ? 'Try again' : 'Start listening'}</button><i class="led" id="pjBeat" data-tip="Beat"></i></div><div class="pj-astate" id="pjAudioState"></div>
       <div class="pj-meters"><span>Level</span><div class="vu"><i id="pjVu" style="width:0"></i></div><span>Bass</span><div class="vu"><i id="pjB-bass" style="width:0"></i></div><span>Mids</span><div class="vu"><i id="pjB-mid" style="width:0"></i></div><span>Treble</span><div class="vu"><i id="pjB-treble" style="width:0"></i></div></div>
-      <p class="muted pj-p">Listening carries on while you change animations, settings, tabs or pages; it stops only when you press Stop listening. If the sound source drops out (for example the audio device changes), Lumen reconnects by itself. Sound is only measured, never recorded or sent anywhere. To make the bulbs follow the music too, choose Music Sync or Immersive on the Lights tab.</p>
+      <p class="muted pj-p">${pj.platform === 'darwin' ? 'macOS does not provide system sound capture here; choosing System sound switches to the microphone if no system track is available.' : 'Listening carries on while you change animations, settings, tabs or pages; it stops only when you press Stop listening.'} If the sound source drops out (for example the audio device changes), Lumen reconnects by itself. Sound is only measured, never recorded or sent anywhere. To make the bulbs follow the music too, choose Music Sync or Immersive on the Lights tab.</p>
       ${r ? `<div class="sect">How “${esc(r.name)}” reacts</div>${pjSlider('Amount', 'react', 0, 1, 0.05, r.react)}<div class="f"><label>Reacts to</label><select data-k="band">${[['bass', 'Bass'], ['mid', 'Mids'], ['treble', 'Treble'], ['level', 'Overall level']].map(([k, n]) => `<option value="${k}" ${r.band === k ? 'selected' : ''}>${n}</option>`).join('')}</select></div>` : none}`;
     pjAudioState();
   }
@@ -282,7 +301,7 @@ function pjWire() {
     const al = t.closest('[data-pjalign]'); if (al) return pjCalibAnswer(+al.dataset.pjalign);
     const pre = t.closest('[data-preset]');
     if (pre && pj.cur.mode === 'auto' && !t.closest('.pj-excl')) { if (!pj.dir) pjDirector(); pj.dir.override(pre.dataset.preset); pj.tab = 'auto'; pjTabs(); pjPanel(); return; } // manual override: hold this animation
-    if (pre && r && r.preset !== pre.dataset.preset) { const id = pre.dataset.preset; pjSnap(); for (const b of document.querySelectorAll('.pj-presets [data-preset]')) b.classList.toggle('on', b.dataset.preset === id); return pjOnBeat(() => { r.preset = id; pjChanged(true); }); }
+    if (pre && r && r.preset !== pre.dataset.preset) { const id = pre.dataset.preset, owner = pj.cur; pjSnap(); for (const b of document.querySelectorAll('.pj-presets [data-preset]')) b.classList.toggle('on', b.dataset.preset === id); return pjOnBeat(() => LumenProjSave.runForCurrentProject(owner, (p) => pj.cur === p, () => { if (!owner.regions.includes(r)) return; r.preset = id; pjChanged(true); })); }
     if (pre) { pjSnap(); if (r) r.preset = pre.dataset.preset; else { const n = PJ.region({ name: 'Wall', preset: pre.dataset.preset, pts: PJ.shape('rect', 0.5, 0.5, 0.9, 0.86) }); pj.cur.regions.push(n); pj.sel = n.id; } return pjChanged(true); }
     const add = t.closest('[data-add]');
     if (add) { if (add.dataset.add === 'free') { pj.add = pj.add ? null : []; pjPanel(); pjSvg(); pjStatus(); return; }
@@ -308,9 +327,9 @@ function pjWire() {
       if (act === 'project' && d && d.primary && !await confirmBox('Project on this screen?', 'The projection will cover this screen, including Lumen. Press Esc to close it.', 'Project')) return;
       pj.out = await call('proj:open', { displayId: pj.display, windowed: act === 'window' }); pjPush(); setTimeout(pjPush, 600); pjBar(); return pjStatus(); }
     if (act === 'close') { pj.out = await call('proj:close'); pjBar(); return pjStatus(); }
-    if (act === 'new') { const n = await ask('New room layout', 'New room'); if (n) pjOpen(PJ.project({ name: n })); pjSave(); return; }
+    if (act === 'new') { const n = await ask('New room layout', 'New room'); if (n) { pjOpen(PJ.project({ name: n })); pjSave(); } return; }
     if (act === 'rename') { const n = await ask('Rename layout', pj.cur.name); if (n) { pj.cur.name = n; pjBar(); pjSave(); } return; }
-    if (act === 'delete') { if (!await confirmBox('Delete layout', `Delete “${pj.cur.name}” and all its shapes?`, 'Delete')) return; await call('proj:delete', pj.cur.id); pj.list = pj.list.filter((p) => p !== pj.cur); return pjOpen(pj.list[0] || PJ.project({ name: 'My room' })); }
+    if (act === 'delete') { if (!await confirmBox('Delete layout', `Delete “${pj.cur.name}” and all its shapes?`, 'Delete')) return; await pjSaveQueue.flush(); await call('proj:delete', pj.cur.id); pj.list = pj.list.filter((p) => p !== pj.cur); return pjOpen(pj.list[0] || PJ.project({ name: 'My room' })); }
     if (act === 'starter') { const b = a.getBoundingClientRect(); return popup(PJ.STARTERS.map((s) => ({ label: s.name, run: () => { pjOpen(PJ.project({ name: s.name, regions: s.regions.map((x) => ({ ...x, id: PJ.uid() })) })); pjSave(); } })), b.left, b.bottom, a); }
     if (act === 'undo') return pjUndo();
     if (act === 'randall') { pjSnap(); pj.cur.regions.forEach(rnd); return pjChanged(true); }
@@ -343,7 +362,7 @@ function pjWire() {
     const t = e.target, L = pj.cur.lights, r = pjSel();
     if (t.id === 'pjLayout') { const p = pj.list.find((x) => x.id === t.value); if (p) pjOpen(p); return; }
     if (t.id === 'pjDisplay') { pj.display = t.value; return; }
-    if (t.id === 'pjFile') { const f = t.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { const img = new Image(); img.onload = () => { const c = document.createElement('canvas'), k = Math.min(1, 960 / img.width); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); pj.cur.photo = c.toDataURL('image/jpeg', 0.7); pjChanged(true); }; img.src = rd.result; }; rd.readAsDataURL(f); return; }
+    if (t.id === 'pjFile') { const f = t.files[0]; if (!f) return; const owner = pj.cur, rd = new FileReader(); rd.onload = () => { const img = new Image(); img.onload = () => { const c = document.createElement('canvas'), k = Math.min(1, 960 / img.width); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); LumenProjSave.commitProjectPhoto(owner, c.toDataURL('image/jpeg', 0.7), (p) => pj.cur === p, () => pjChanged(true)); if (pj.cur !== owner) pjSaveQueue.queue(owner, owner); }; img.src = rd.result; }; rd.readAsDataURL(f); return; }
     if (t.dataset.vis) { const x = pj.cur.regions.find((q) => q.id === t.dataset.vis); if (x) { x.hidden = !t.checked; pjChanged(); } return; }
     if (t.dataset.flag) { pj.cur[t.dataset.flag] = t.checked; return pjChanged(); }
     if (t.dataset.inc) { L.exclude = L.exclude.filter((x) => x !== t.dataset.inc); if (!t.checked) L.exclude.push(t.dataset.inc); return pjChanged(); }

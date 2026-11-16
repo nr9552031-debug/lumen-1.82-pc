@@ -1,6 +1,7 @@
 # TODO (priority order)
-1. Owner tries the PC and Mac builds from the `latest` release and reports what's wrong.
-2. Restore the missing tests (see STATUS.md "Gaps found"), verify they pass on current code, and restore the full `npm test`.
-3. Mac parity: system-sound capture on macOS for Effects (currently Windows-only).
-4. Verify each integration (WiZ, Cync, Hubspace) end to end and record evidence in STATUS.md.
-5. Owner ideas and bugs go here or in GitHub issues.
+1. Complete the Projection Studio audit and fixes (active): finish remaining mode transitions and output/no-display cases, then verify behavior on a projector and real bulbs on Mac and PC. Layout/photo/beat-change races and restore ordering, fidelity, retry, and shutdown paths are fixed and covered by hardware-free checks; Mac audio fallback logic is in place, with real capture still needing verification.
+2. Restore the missing tests (see STATUS.md "Gaps found"), verify them against current code, and restore the full `npm test`. Current WiZ fixtures also need an environment-independent loopback setup for hosts that do not expose the whole 127/8 range.
+3. Owner tries the PC and Mac builds from the `latest` release and reports what's wrong.
+4. Mac parity: system-sound capture on macOS for Effects (currently Windows-only loopback).
+5. Verify each integration (WiZ, Cync, Hubspace) end to end and record evidence in STATUS.md.
+6. Owner ideas and bugs go here or in GitHub issues.

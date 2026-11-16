@@ -69,8 +69,8 @@ The Hubspace and Cync integrations are unofficial and reverse-engineered; they c
 
 1. Choose the projector under the display list and click **Project** (Esc closes it) or **Preview window**.
 2. On **Mapping**, tick the calibration grid, add shapes and drag their corners onto walls, frames, doors and furniture. Every shape is independent; a wall can hold as many as you like.
-3. On **Visuals**, click a shape and pick one of the 21 animations. Each shape has its own speed, colour shift, brightness, opacity and blending.
+3. On **Visuals**, click a shape and pick one of the 35 animations. Each shape has its own speed, colour shift, brightness, opacity and blending.
 4. On **Lights**, choose what the bulbs do (Projection Only, Match Colours, Ambient, Music Sync, Immersive, Custom), then press **Play**. **Stop** puts every bulb back how it was.
-5. On **Audio**, listen to the PC's sound or a microphone; each shape has its own reaction amount and band.
+5. On **Audio**, listen to system sound or a microphone; on macOS, Projection Studio switches to the microphone when system audio is unavailable. Each shape has its own reaction amount and band.
 
 Bulbs are driven from a separate process at each brand's own pace, so a slow cloud bulb never slows the picture. Not included: mesh warping, edge blending between projectors, and video files as visuals.
