@@ -6,6 +6,8 @@
 - Projection Studio: capture debounced saves per layout so switching projects cannot redirect or discard pending shape edits; flush before deleting a layout.
 - Projection Studio: wait for in-flight bulb writes before restoring, share concurrent Stop work, and hold native app quit until active lighting drivers finish.
 - Projection Studio: retain snapshots for failed or unavailable bulb restores, show the reason, and allow retries from the Lights tab.
+- Projection Studio: keep delayed room-photo imports attached to the layout that selected the file.
+- Projection Studio: ignore beat-scheduled shape changes after switching away from their layout or removing the shape.
 - Add hardware-free checks for Projection Studio project persistence and restore after output failures.
 - Check that every picker animation has a shader, each animation belongs to one group, and all page script references exist.
 - Correct the README animation count to the 35 presets provided by the current code.

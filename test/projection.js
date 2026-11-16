@@ -7,7 +7,7 @@ const path = require('path');
 const vm = require('vm');
 const PJ = require('../src/shared/proj-core');
 const PJA = require('../src/shared/proj-audio');
-const { createSaveQueue } = require('../src/shared/proj-save');
+const { createSaveQueue, commitProjectPhoto, runForCurrentProject } = require('../src/shared/proj-save');
 const { createApi } = require('../src/main/api');
 const { ProjLights } = require('../src/main/projlights');
 
@@ -23,6 +23,15 @@ async function main() {
   assert.strictEqual(writes[0].name, 'First layout edited', 'the latest shape changes are captured');
   assert.strictEqual(writes[1].name, 'Second layout', 'switching layouts does not redirect a pending save');
   assert.strictEqual(ownerA.id, 'new-a', 'the new layout id is assigned to its owner');
+
+  const photoOwner = { name: 'Photo source layout' }, otherLayout = { name: 'Selected layout' };
+  let photoRepainted = false;
+  commitProjectPhoto(photoOwner, 'data:image/jpeg;base64,photo', (owner) => owner === otherLayout, () => { photoRepainted = true; });
+  assert.strictEqual(photoOwner.photo, 'data:image/jpeg;base64,photo', 'a delayed photo load updates its originating project');
+  assert.strictEqual(photoRepainted, false, 'a delayed photo load does not repaint the newly selected project');
+  let scheduledMutation = 0;
+  assert.strictEqual(runForCurrentProject(photoOwner, (owner) => owner === otherLayout, () => { scheduledMutation++; }), false, 'a delayed beat change is canceled after switching projects');
+  assert.strictEqual(scheduledMutation, 0, 'a stale scheduled animation change cannot mutate a detached shape');
 
   // Stop must wait for a slow cloud write to settle before applying the pre-show state, otherwise
   // the late show write can land after the restore command and leave the bulb changed.

@@ -301,7 +301,7 @@ function pjWire() {
     const al = t.closest('[data-pjalign]'); if (al) return pjCalibAnswer(+al.dataset.pjalign);
     const pre = t.closest('[data-preset]');
     if (pre && pj.cur.mode === 'auto' && !t.closest('.pj-excl')) { if (!pj.dir) pjDirector(); pj.dir.override(pre.dataset.preset); pj.tab = 'auto'; pjTabs(); pjPanel(); return; } // manual override: hold this animation
-    if (pre && r && r.preset !== pre.dataset.preset) { const id = pre.dataset.preset; pjSnap(); for (const b of document.querySelectorAll('.pj-presets [data-preset]')) b.classList.toggle('on', b.dataset.preset === id); return pjOnBeat(() => { r.preset = id; pjChanged(true); }); }
+    if (pre && r && r.preset !== pre.dataset.preset) { const id = pre.dataset.preset, owner = pj.cur; pjSnap(); for (const b of document.querySelectorAll('.pj-presets [data-preset]')) b.classList.toggle('on', b.dataset.preset === id); return pjOnBeat(() => LumenProjSave.runForCurrentProject(owner, (p) => pj.cur === p, () => { if (!owner.regions.includes(r)) return; r.preset = id; pjChanged(true); })); }
     if (pre) { pjSnap(); if (r) r.preset = pre.dataset.preset; else { const n = PJ.region({ name: 'Wall', preset: pre.dataset.preset, pts: PJ.shape('rect', 0.5, 0.5, 0.9, 0.86) }); pj.cur.regions.push(n); pj.sel = n.id; } return pjChanged(true); }
     const add = t.closest('[data-add]');
     if (add) { if (add.dataset.add === 'free') { pj.add = pj.add ? null : []; pjPanel(); pjSvg(); pjStatus(); return; }
@@ -362,7 +362,7 @@ function pjWire() {
     const t = e.target, L = pj.cur.lights, r = pjSel();
     if (t.id === 'pjLayout') { const p = pj.list.find((x) => x.id === t.value); if (p) pjOpen(p); return; }
     if (t.id === 'pjDisplay') { pj.display = t.value; return; }
-    if (t.id === 'pjFile') { const f = t.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { const img = new Image(); img.onload = () => { const c = document.createElement('canvas'), k = Math.min(1, 960 / img.width); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); pj.cur.photo = c.toDataURL('image/jpeg', 0.7); pjChanged(true); }; img.src = rd.result; }; rd.readAsDataURL(f); return; }
+    if (t.id === 'pjFile') { const f = t.files[0]; if (!f) return; const owner = pj.cur, rd = new FileReader(); rd.onload = () => { const img = new Image(); img.onload = () => { const c = document.createElement('canvas'), k = Math.min(1, 960 / img.width); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); LumenProjSave.commitProjectPhoto(owner, c.toDataURL('image/jpeg', 0.7), (p) => pj.cur === p, () => pjChanged(true)); if (pj.cur !== owner) pjSaveQueue.queue(owner, owner); }; img.src = rd.result; }; rd.readAsDataURL(f); return; }
     if (t.dataset.vis) { const x = pj.cur.regions.find((q) => q.id === t.dataset.vis); if (x) { x.hidden = !t.checked; pjChanged(); } return; }
     if (t.dataset.flag) { pj.cur[t.dataset.flag] = t.checked; return pjChanged(); }
     if (t.dataset.inc) { L.exclude = L.exclude.filter((x) => x !== t.dataset.inc); if (!t.checked) L.exclude.push(t.dataset.inc); return pjChanged(); }

@@ -33,7 +33,16 @@
     }
     return { queue, flush, pending: () => pending.size };
   }
-  const api = { createSaveQueue };
+  function commitProjectPhoto(owner, photo, isCurrent, onCurrent) {
+    owner.photo = photo;
+    if (isCurrent(owner)) onCurrent(owner);
+  }
+  function runForCurrentProject(owner, isCurrent, run) {
+    if (!isCurrent(owner)) return false;
+    run(owner);
+    return true;
+  }
+  const api = { createSaveQueue, commitProjectPhoto, runForCurrentProject };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LumenProjSave = api;
 })(typeof window !== 'undefined' ? window : globalThis);

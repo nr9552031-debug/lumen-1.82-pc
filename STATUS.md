@@ -2,6 +2,11 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (asynchronous layout ownership)
+- Fixed two layout-switch races: delayed Room photo decoding now updates the project that selected the file, and beat-scheduled animation changes are discarded if the user has switched projects or removed the shape before the beat. Added hardware-free checks for both ownership guards.
+- `node test/projection.js` and syntax checks pass. `npm test` again passes Projection checks and stops at the WiZ fixture bind (`EPERM`, `127.0.0.70:38899`).
+- Next: continue tracing Studio mode transitions and output/no-display behavior; UI/runtime verification still needs Electron to launch.
+
 ### 2026-11-15 Codex (retryable light restoration)
 - Fixed a restore failure path: manager.apply reports per-device failures in its result instead of throwing, while Projection Lights previously discarded every saved snapshot regardless. Failed or temporarily unavailable bulbs now remain in the snapshot, are reported in Studio status, and can be retried from Lights.
 - `node test/projection.js` passes the failure-then-retry case (snapshot retained after first failure and cleared after success); `node --check` passes for the changed main and renderer files. `npm test` passes the Projection tests and remains blocked at the WiZ fixture bind (`EPERM` on `127.0.0.70:38899`).
