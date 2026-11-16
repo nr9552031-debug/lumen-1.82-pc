@@ -4,4 +4,5 @@
 - Restructured the repo: app is now at the repo root (was in a nested folder). Old zip removed (still in git history).
 - Added auto builds for Windows and Mac to the `latest` release on every push to main, and CI tests on Windows/macOS/Linux.
 - Not yet verified: first CI run and first Mac build. Check the Actions tab.
+- FOUND: the uploaded source is missing test files that `package.json` used to run (`test/run.js`, `show.js`, `effects.js`, `av.js`, `ui.js`, `studio.js`). `npm test` now runs only the 3 WiZ tests that exist (all pass locally). If the owner has the full test folder on their machine, add it back and restore the old test script.
 - Next: confirm CI is green, then start on Mac sound capture (see TASKS.md).
