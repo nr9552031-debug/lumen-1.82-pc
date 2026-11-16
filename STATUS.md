@@ -2,6 +2,11 @@
 Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-16 Codex (animation overhaul milestone 3 Noise Fields family)
+- Rebuilt Galaxy as spiral-arm dust and stars, Nebula as broad warped veils, Plasma as slow interference, and Ink as marbled pigment pools. Preset IDs remain the same; all four use the shared palette and common controls.
+- `node --check src/shared/proj-render.js` and `node --check test/projection.js` pass; `node test/projection.js` verifies each Noise Field shader source includes palette and audio controls. `npm test` passes Projection checks and then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). No GLSL compiler/GPU appearance run is available.
+- Next: rebuild Reactive and Ambient. Still need Windows/Mac shader compilation, projector eye-check, and performance measurements.
+
 ### 2026-11-16 Codex (animation overhaul milestone 3 Geometry family)
 - Rebuilt all 11 Geometry shaders: warped currents, portal aperture, energy rails, Julia fractal, kaleidoscope, perspective tunnel, synth horizon, centered rings, laser beams, disco facets, and honeycomb. The fractal loop cap drops from 40 to 28. Existing preset IDs remain unchanged.
 - `node --check src/shared/proj-render.js` and `node --check test/projection.js` pass; `node test/projection.js` verifies palette/audio controls in each Geometry shader and constant loop bounds. `npm test` passes Projection checks, then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). No shader compiler or GPU rendering is available.
@@ -101,6 +106,7 @@ Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else
 - VERIFIED (local, 2026-11-16): `node test/projection.js` checked all 35 preset profile outputs for bounded controls, increased speed under music energy, and zero hit/drop events in silence; it also checked the 11 rebuilt Flow shader sources for shared palette/audio-control wiring. These are CPU/source checks, not GLSL compilation or appearance evidence.
 - VERIFIED (local, 2026-11-16): `node test/projection.js` checks shared palette/audio wiring and fixed loop bounds (≤16) for the 5 rebuilt Particle shaders; this does not compile or render the shaders.
 - VERIFIED (local, 2026-11-16): `node test/projection.js` checks palette/audio wiring and constant loop bounds for all 11 rebuilt Geometry shaders, including the 28-iteration fractal cap; this does not compile or render them.
+- VERIFIED (local, 2026-11-16): `node test/projection.js` checks shared palette/audio source wiring for the 4 rebuilt Noise Field shaders; this is not GLSL compilation or rendered appearance.
 - UNVERIFIED: app launch; after `npm ci`, `npm start` exits with `SIGABRT` before the Studio UI is visible. The stack trace did not identify the cause.
 - VERIFIED (GitHub Actions run on main, commit 0e06276): the 3 WiZ simulated-bulb tests (wiz-caps, wiz-errors, wiz-multi) pass on Windows, macOS and Linux.
 - VERIFIED (same run): `npm run dist` and `npm run dist:mac` both produced artifacts (Windows installer + portable exe; Mac arm64/x64 dmg + zip), published to the `latest` release.
