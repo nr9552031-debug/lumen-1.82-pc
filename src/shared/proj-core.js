@@ -34,11 +34,11 @@
 
   // Curated neighboring hues keep the palette transitions clear on a wall. Stops are sRGB hex.
   const PALETTES = Object.freeze({
-    aurora: Object.freeze(['#07172b', '#176c70', '#63d39b', '#b6d7ef']),
-    ember: Object.freeze(['#160d26', '#842943', '#ee693a', '#ffd08a']),
-    tide: Object.freeze(['#06162b', '#075d83', '#24b2bb', '#d2f3df']),
-    dusk: Object.freeze(['#19153b', '#5b4c8b', '#b96682', '#f1b98b']),
-    mono: Object.freeze(['#08111f', '#3b4d62', '#a8bacb', '#f5f4eb']),
+    aurora: Object.freeze(['#07172b', '#176c70', '#63d39b', '#b6d7ef', '#07172b']),
+    ember: Object.freeze(['#160d26', '#842943', '#ee693a', '#ffd08a', '#160d26']),
+    tide: Object.freeze(['#06162b', '#075d83', '#24b2bb', '#d2f3df', '#06162b']),
+    dusk: Object.freeze(['#19153b', '#5b4c8b', '#b96682', '#f1b98b', '#19153b']),
+    mono: Object.freeze(['#08111f', '#3b4d62', '#a8bacb', '#f5f4eb', '#08111f']),
   });
   const PALETTE_IDS = Object.freeze(Object.keys(PALETTES));
   const paletteId = (id) => PALETTES[id] ? id : 'aurora';
@@ -64,6 +64,12 @@
     const x = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x)), k = x - i;
     const a = toLab(hexRgb(stops[i])), b = toLab(hexRgb(stops[i + 1]));
     return fromLab(a.map((v, j) => v + (b[j] - v) * k));
+  }
+  function palettePixels(id, size = 256) {
+    size = Math.max(2, Math.min(1024, Math.round(Number(size) || 256)));
+    const out = new Uint8Array(size * 4);
+    for (let i = 0; i < size; i++) { const c = paletteColor(id, i / (size - 1)), j = i * 4; out[j] = Math.round(c[0] * 255); out[j + 1] = Math.round(c[1] * 255); out[j + 2] = Math.round(c[2] * 255); out[j + 3] = 255; }
+    return out;
   }
 
   // Bounded audio semantics shared by profiles and tests. `body`, `air`, and `hit` are
@@ -272,6 +278,6 @@
   // dominant hue of each animation (radians, measured from rendered frames; null = mostly grey), used to keep colour
   // continuity when one animation changes into another
   const HUES = {"galaxy":-0.74,"stars":-1.2,"nebula":2.15,"aurora":-1.65,"warp":-1.96,"fire":0.9,"smoke":null,"clouds":-2.17,"ocean":-1.84,"waves":-2.65,"portal":null,"energy":-0.83,"lightning":-1.14,"magic":1.88,"particles":1.43,"plasma":1.29,"fractal":2.57,"kaleido":3.11,"tunnel":-1.87,"gradient":-0.87,"glow":0.96,"flow":-1.49,"lava":0.85,"ink":2.24,"bokeh":1.13,"fireflies":2.33,"rays":-2.33,"rain":-1.81,"snow":-1.94,"sunset":-0.02,"synth":0.15,"rings":1.69,"laser":1.92,"disco":1.71,"hex":-1.05};
-  const api = { MODES, XF, HUES, PRESETS, PRESET_IDS, PRESET_ALIASES, presetId, PALETTES, PALETTE_IDS, paletteId, paletteColor, audioFeature, GROUPS, PROFILES, CTRL, newControls, controls, BLENDS, LIGHT_MODES, STYLES, STARTERS, uid, pointInPoly, triangulate, bbox, centre, moved, rotated, scaled, shape, region, project, lightTargets };
+  const api = { MODES, XF, HUES, PRESETS, PRESET_IDS, PRESET_ALIASES, presetId, PALETTES, PALETTE_IDS, paletteId, paletteColor, palettePixels, audioFeature, GROUPS, PROFILES, CTRL, newControls, controls, BLENDS, LIGHT_MODES, STYLES, STARTERS, uid, pointInPoly, triangulate, bbox, centre, moved, rotated, scaled, shape, region, project, lightTargets };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LumenProj = api;
 })(typeof window !== 'undefined' ? window : globalThis);

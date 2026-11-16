@@ -18,7 +18,13 @@ async function main() {
     const rgb = PJ.paletteColor(id, phase);
     assert.strictEqual(rgb.length, 3);
     assert(rgb.every((v) => Number.isFinite(v) && v >= 0 && v <= 1), `${id} palette sample stays in sRGB range`);
+    const pixels = PJ.palettePixels(id, 16);
+    assert(pixels instanceof Uint8Array && pixels.length === 64, `${id} palette texture has RGBA byte data`);
+    for (let i = 3; i < pixels.length; i += 4) assert.strictEqual(pixels[i], 255, `${id} palette texture stays opaque`);
+    assert.deepStrictEqual(Array.from(pixels.slice(0, 3)), Array.from(pixels.slice(-4, -1)), `${id} palette wraps without a visible endpoint jump`);
   }
+  assert.strictEqual(PJ.palettePixels('aurora', 1).length, 8, 'palette texture generation clamps to the minimum valid width');
+  assert.strictEqual(PJ.palettePixels('aurora', 2048).length, 4096, 'palette texture generation caps its allocation');
   assert.deepStrictEqual(PJ.paletteColor('not-a-palette', 0), PJ.paletteColor('aurora', 0), 'unknown palettes migrate to a safe default');
   for (const id of PJ.PRESET_IDS) assert.strictEqual(PJ.presetId(id), id, `${id} keeps resolving for existing layouts`);
   assert.strictEqual(PJ.presetId('unknown-preset'), 'galaxy', 'unknown preset data has a safe fallback');
@@ -96,7 +102,12 @@ async function main() {
     LumenEvolve: require('../src/shared/av-evolve'),
     LumenDirector: require('../src/shared/av-director'),
   };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../src/shared/proj-render.js'), 'utf8'), { window: renderWindow, console });
+  const renderSource = fs.readFileSync(path.join(__dirname, '../src/shared/proj-render.js'), 'utf8');
+  vm.runInNewContext(renderSource, { window: renderWindow, console });
+  assert(renderSource.includes('uniform sampler2D PALETTE') && renderSource.includes('P.palettePixels(key, 256)'), 'shared renderer uploads the normalized shared palette for its GLSL shader');
+  assert(renderSource.includes('uniform1f(pr.U.SHIFT, st.hue / 360)') && renderSource.includes('fract(rawL+SHIFT+TINT*.08)'), 'shape colour shift continues to move through the selected palette');
+  const editorSource = fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8');
+  assert(editorSource.includes('data-palette') && editorSource.includes('pj.cur.palette = PJ.paletteId(t.value)'), 'Visuals tab persists the selected shared palette');
   const grouped = PJ.GROUPS.flatMap((g) => g[1]);
   assert.strictEqual(grouped.length, PJ.PRESET_IDS.length, 'each animation appears in a picker group');
   assert.strictEqual(new Set(grouped).size, PJ.PRESET_IDS.length, 'picker groups contain no duplicate animations');

@@ -11,7 +11,7 @@ precision highp float;
 #else
 precision mediump float;
 #endif
-varying vec2 u; uniform float T,H,B,O,A,K,ASP; uniform int MODE; uniform vec4 P0,P1,P2,E0,E1,XF;
+varying vec2 u; uniform float T,H,B,O,A,K,ASP,SHIFT; uniform int MODE; uniform vec4 P0,P1,P2,E0,E1,XF; uniform sampler2D PALETTE;
 #define FLOW E0.xy
 #define PHASE E0.z
 #define MORPH E0.w
@@ -34,7 +34,7 @@ varying vec2 u; uniform float T,H,B,O,A,K,ASP; uniform int MODE; uniform vec4 P0
 float h1(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h1(i),h1(i+vec2(1,0)),f.x),mix(h1(i+vec2(0,1)),h1(i+vec2(1,1)),f.x),f.y);}
 float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*n2(p);p=mat2(.8,.6,-.6,.8)*p*2.03+7.1;a*=.5;}return s;}
-vec3 pal(float t,vec3 d){return .5+.5*cos(6.2832*(t+d));}
+vec3 pal(float t,vec3 d){float q=fract(.5+.5*cos(6.2832*(t+dot(d,vec3(1.7,3.1,5.3)))));return texture2D(PALETTE,vec2(q,.5)).rgb;}
 vec3 hue(vec3 c,float a){vec3 k=vec3(.57735);float ca=cos(a),sa=sin(a);return c*ca+cross(k,c)*sa+k*dot(k,c)*(1.-ca);}
 `;
   // transition masks (XF.x style, XF.y progress 0..1): 0 fade, 1 dissolve, 2 bloom from the centre, 3 sweep, 4 morph (a fade
@@ -50,7 +50,7 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
  float rr=length(p),ring=exp(-pow((rr-SHOCKR*1.9)*6.,2.))*SHOCKA;p*=1.-.11*ring;
  p+=SHIM*.012*vec2(sin(p.y*38.+T*9.),cos(p.x*38.-T*8.));
  p+=DETAIL*.006*vec2(sin(p.y*47.+PHASE*9.),cos(p.x*43.-PHASE*8.));
- vec3 c=fx(p,T);c=hue(c,H+TINT*1.2)*B*(1.+A*.45+ring*.35+DROP*.3)+K*.12;c=max(c,0.);c=mix(c,.8+.2*(1.-exp(-(c-.8)*5.)),step(.8,c));c+=(h1(gl_FragCoord.xy+fract(T)*61.)-.5)/200.;c=clamp(c,0.,1.);
+ vec3 c=hue(fx(p,T),H+TINT*1.2);float rawL=clamp(dot(c,vec3(.299,.587,.114)),0.,1.);c=mix(c,texture2D(PALETTE,vec2(fract(rawL+SHIFT+TINT*.08),.5)).rgb,.32);c=c*B*(1.+A*.45+ring*.35+DROP*.3)+K*.12;c=max(c,0.);c=mix(c,.8+.2*(1.-exp(-(c-.8)*5.)),step(.8,c));c+=(h1(gl_FragCoord.xy+fract(T)*61.)-.5)/200.;c=clamp(c,0.,1.);
  float lum=dot(c,vec3(.299,.587,.114));c=mix(c,clamp(mix(vec3(lum),c,1.3)*(1.+.1*MOOD),0.,1.),max(MOOD,0.)*.55);c=mix(c,mix(vec3(lum),c,.82)*.93,max(-MOOD,0.)*.45);
  float al=O;if(XF.z>.5){float m=xfm(u,XF.x,XF.y);al=XF.z<1.5?(MODE==0?O*(1.-m)/max(1e-4,1.-O*m):O*(1.-m)):O*m;}
  if(MODE==0)gl_FragColor=vec4(c,al);else gl_FragColor=vec4(c*al,1.);}`;
@@ -97,13 +97,22 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
 
   class ProjRenderer {
     constructor(canvas) {
-      this.cv = canvas; this.progs = {}; this.geo = new Map(); this.beat = 0; this.lastT = 0; this.clock = {}; this.st = {};
+      this.cv = canvas; this.progs = {}; this.geo = new Map(); this.beat = 0; this.lastT = 0; this.clock = {}; this.st = {}; this.paletteId = null; this.paletteTex = null;
       this.ctlA = new Float32Array(12); this.ctlB = new Float32Array(12); this.zero8 = new Float32Array(8); this._eoSrc = null; this._eo = EVO ? EVO.DEFAULTS : null;
       const gl = this.gl = canvas.getContext('webgl', { alpha: false, antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
       if (!gl) { this.error = 'This computer did not give Lumen a graphics (WebGL) context, so animations cannot be drawn.'; return; }
-      this.buf = gl.createBuffer();
+      this.buf = gl.createBuffer(); this._setPalette('aurora');
       canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.progs = {}; });
-      canvas.addEventListener('webglcontextrestored', () => { this.buf = this.gl.createBuffer(); });
+      canvas.addEventListener('webglcontextrestored', () => { const key = this.paletteId || 'aurora'; this.buf = this.gl.createBuffer(); this.paletteTex = null; this.paletteId = null; this.progs = {}; this._setPalette(key); });
+    }
+    _setPalette(id) {
+      const gl = this.gl, key = P.paletteId(id);
+      if (!gl || gl.isContextLost() || (key === this.paletteId && this.paletteTex)) return;
+      if (!this.paletteTex) this.paletteTex = gl.createTexture();
+      if (!this.paletteTex) { this.error = 'Lumen could not create a graphics texture for the selected palette.'; return; }
+      gl.bindTexture(gl.TEXTURE_2D, this.paletteTex); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, P.palettePixels(key, 256)); this.paletteId = key;
     }
     _prog(id) {
       if (this.progs[id]) return this.progs[id];
@@ -111,7 +120,7 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
       const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, VS)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, HEAD + (FX[id] || FX.gradient) + TAIL));
       gl.bindAttribLocation(p, 0, 'a_p'); gl.bindAttribLocation(p, 1, 'a_u'); gl.linkProgram(p);
       if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(id + ': ' + gl.getProgramInfoLog(p));
-      const U = {}; for (const n of ['T', 'H', 'B', 'O', 'A', 'K', 'ASP', 'MODE', 'P0', 'P1', 'P2', 'E0', 'E1', 'XF']) U[n] = gl.getUniformLocation(p, n);
+      const U = {}; for (const n of ['T', 'H', 'B', 'O', 'A', 'K', 'ASP', 'SHIFT', 'MODE', 'P0', 'P1', 'P2', 'E0', 'E1', 'XF', 'PALETTE']) U[n] = gl.getUniformLocation(p, n);
       return (this.progs[id] = { p, U });
     }
     // triangles for a shape, with texture coordinates running 0..1 across its bounding box
@@ -128,6 +137,8 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
     // (LumenProj.controls) - motion, distortion, particles, shockwaves - not just brightness.
     render(project, tSec, audio, styleK = 1) {
       const gl = this.gl; if (!gl || gl.isContextLost()) return;
+      if (project) this._setPalette(project.palette);
+      if (!this.paletteTex) return;
       const dt = Math.min(0.1, Math.max(0, tSec - this.lastT)); this.lastT = tSec;
       if (audio && audio.beat) this.beat = 1; else this.beat *= Math.pow(0.02, dt);
       gl.viewport(0, 0, this.cv.width, this.cv.height); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -190,8 +201,9 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
     _draw(id, r, st, g, outAsp, mode, a, audio, react, ctl, E, xf, xk, role, hueOff) {
       const gl = this.gl; let pr; try { pr = this._prog(id); } catch (err) { if (!this.error) this.error = err.message; return; }
       gl.useProgram(pr.p);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.paletteTex); gl.uniform1i(pr.U.PALETTE, 0);
       gl.uniform1f(pr.U.T, this.clock[r.id]); gl.uniform1f(pr.U.H, (st.hue * Math.PI) / 180 + hueOff); gl.uniform1f(pr.U.B, st.bright); gl.uniform1f(pr.U.O, r.opacity);
-      gl.uniform1f(pr.U.A, a); gl.uniform1f(pr.U.K, audio ? this.beat * react : 0); gl.uniform1f(pr.U.ASP, g.asp * outAsp); gl.uniform1i(pr.U.MODE, mode);
+      gl.uniform1f(pr.U.A, a); gl.uniform1f(pr.U.K, audio ? this.beat * react : 0); gl.uniform1f(pr.U.ASP, g.asp * outAsp); gl.uniform1f(pr.U.SHIFT, st.hue / 360); gl.uniform1i(pr.U.MODE, mode);
       gl.uniform4f(pr.U.P0, ctl[0], ctl[1], ctl[2], ctl[3]); gl.uniform4f(pr.U.P1, ctl[4], ctl[5], ctl[6], ctl[7]); gl.uniform4f(pr.U.P2, ctl[8], ctl[9], ctl[10], ctl[11]);
       gl.uniform4f(pr.U.E0, E[0], E[1], E[2], E[3]); gl.uniform4f(pr.U.E1, E[4], E[5], E[6], E[7]); gl.uniform4f(pr.U.XF, xf, xk, role, 0);
       gl.drawArrays(gl.TRIANGLES, 0, g.n);

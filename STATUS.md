@@ -1,11 +1,16 @@
 # STATUS
-Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
+Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-16 Codex (animation overhaul milestone 3 palette integration)
+- Connected the saved project palette to a selector in Visuals and a reusable 256×1 texture in the shared WebGL shader. All shader output now receives the selected palette before brightness; the per-shape Colour shift offsets it, and context restoration retains the selected palette. Existing layout IDs and shape settings are unchanged.
+- `node test/projection.js` and syntax checks for the touched JavaScript pass. Tests cover bounded RGBA texture creation, opaque samples, seamless palette endpoints, all animation IDs, and palette UI/renderer source wiring. `npm test` passes the Projection test and then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). `npm start` exits with Electron `SIGABRT` before showing a window. These checks do not compile GLSL or verify appearance on a GPU.
+- Next: rebuild the animation families and add new looks. Still need Windows/Mac GPU, projector appearance, 1080p/4K performance, and light-rate checks.
+
 ### 2026-11-15 Codex (animation overhaul milestone 2)
 - Added five curated shared palettes with bounded OKLab interpolation, optional saved project palette normalization, a central animation-ID resolver, and allocation-free bounded feature reads for shader control profiles. Existing saves keep their preset IDs and receive the `aurora` palette default.
-- `node test/projection.js` passes palette range/fallback, old-ID resolution, project default/round-trip, and bass/body/air/hit/drop/silence mapping checks; `node --check src/shared/proj-core.js` passes. `npm test` then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`). No live shader or picker consumes the new palette yet.
-- Next: publish this shared-logic milestone; milestone 3 integrates palette uniforms and rebuilds the animation families. Still need Windows/Mac GPU, projector appearance, 1080p/4K performance, and light-rate checks.
+- `node test/projection.js` passes palette range/fallback, old-ID resolution, project default/round-trip, and bass/body/air/hit/drop/silence mapping checks; `node --check src/shared/proj-core.js` passes. `npm test` then fails at the known WiZ fixture bind (`EPERM 127.0.0.70:38899`).
+- Next: connect palettes and rebuild animation families. Still need Windows/Mac GPU, projector appearance, 1080p/4K performance, and light-rate checks.
 
 ### 2026-11-15 Codex (animation overhaul milestone 1)
 - Pulled latest `main`, read the required instructions/status docs, inspected current `proj-core.js`, `proj-render.js`, projector page, and audio feature contract. Researched MilkDrop/projectM, Butterchurn, procedural SDF/noise/palettes, flow noise, boids, and Gray-Scott.

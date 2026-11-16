@@ -1,6 +1,6 @@
 # Projection Studio animation overhaul
 
-Status: milestones 1 and 2 are complete. Shared palette data/sampling, audio-feature normalization, and preset ID resolution are implemented in `proj-core.js`; shader and picker adoption remains part of milestones 3–4. This plan preserves the current project format and WebGL 1 renderer unless a measured compatibility need justifies a change.
+Status: milestones 1 and 2 are complete; milestone 3 has started. Shared palette data/sampling, audio-feature normalization, and preset ID resolution are implemented in `proj-core.js`. The Visuals tab now saves a shared palette choice and the common WebGL 1 shader reads it. Family rebuilds remain unfinished; palette shader compilation and appearance are not verified on a GPU.
 
 ## What exists today
 
@@ -81,9 +81,10 @@ Keep Projection Lights' snapshot/restore path and provider rate limits intact. K
 ### 2. Shared building blocks
 - [x] Add stable palette definitions/OKLab sampling, bounded audio feature semantics, and a central preset ID resolver in `proj-core.js`.
 - [x] Add deterministic tests for palette range/defaulting, feature mapping/silence, legacy ID resolution, and project palette round-trips.
-- Remaining: exercise profile attack/release and rate-limited light behavior with the existing light service tests; connect palettes to shader uniforms and the picker during family rebuilds.
+- Remaining: exercise profile attack/release and rate-limited light behavior with the existing light service tests. Palette consumption is an initial milestone 3 integration; the visual family rebuild is still outstanding.
 
 ### 3. Rebuild families
+- [x] Add the saved shared-palette selector to Visuals and upload one reusable palette texture to the shared shader. Hardware-free tests cover texture bytes, cyclic endpoints, project selection persistence, and source wiring; this does not verify GLSL compilation or appearance.
 - Update current shaders family by family, keeping IDs and existing project behavior loadable. After each family, test shader inventory/migration and the shared audio contract; visually review sample captures before calling a look successful.
 
 ### 4. Add new animations and transitions
