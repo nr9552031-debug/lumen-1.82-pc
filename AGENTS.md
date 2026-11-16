@@ -58,6 +58,7 @@ Treat the latest source code as authoritative. Treat documentation as a record o
 ## Builds (rebuilt automatically on every push to main)
 - GitHub Actions runs `npm test` on Windows, macOS and Linux, builds the Windows installer + portable exe and the Mac dmg + zip, and publishes both to the **latest** release: https://github.com/nr9552031-debug/lumen-1.82-pc/releases/tag/latest
 - If CI fails after your push, fix it first.
+- Versions are automatic: every build on main gets the next patch number (1.8.3, 1.8.4, ...), computed by `scripts/ci-version.js` from the run number. Do NOT edit the patch number by hand. To start a new minor/major (e.g. 1.9), set package.json `version` to `1.9.0` and `versionBuildOffset` to (current workflow run number - 1).
 
 ## Commands
 `npm install`, `npm start`, `npm test` (must pass), `npm run dist` (Windows build), `npm run dist:mac` (Mac build, on a Mac). Layout: `src/main` (Electron main, providers), `src/renderer` (UI), `src/shared` (show/projection/audio), `test/`, `build/` (icons), `scripts/`. See ARCHITECTURE.md and README.md.

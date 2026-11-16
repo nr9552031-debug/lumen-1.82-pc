@@ -15,6 +15,7 @@
 - Correct the README animation count to the 35 presets provided by the current code.
 
 ## 2026-11-15
+- Automatic versioning: each build on main gets the next patch version (1.8.3, 1.8.4, ...); release title and file names show it. Unverified until the first build runs.
 - Mac build: ad-hoc signing (`mac.identity` "-") to avoid the "damaged" error. Unverified.
 - Repo restructured: app moved to the repo root; legacy zip removed.
 - Added CI (tests on Windows/macOS/Linux) and automatic PC + Mac builds published to the `latest` release.

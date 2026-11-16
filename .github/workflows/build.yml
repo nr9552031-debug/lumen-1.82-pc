@@ -29,6 +29,9 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Set build version (goes up by one every build)
+        shell: bash
+        run: node scripts/ci-version.js --apply
       - name: Make Mac icon
         if: runner.os == 'macOS'
         run: bash scripts/make-icns.sh
@@ -47,6 +50,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Work out the version
+        id: ver
+        run: echo "v=$(node scripts/ci-version.js)" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -58,5 +65,5 @@ jobs:
         run: |
           gh release delete latest --cleanup-tag --yes || true
           gh release create latest out/* --target "${{ github.sha }}" --prerelease \
-            --title "Latest build (PC + Mac)" \
-            --notes "Auto-built from commit ${{ github.sha }}. PC: Lumen-Setup / Lumen-Portable .exe. Mac: .dmg (Apple Silicon and Intel). Mac build is unsigned: right-click the app and choose Open the first time."
+            --title "Lumen ${{ steps.ver.outputs.v }} (latest build, PC + Mac)" \
+            --notes "Version ${{ steps.ver.outputs.v }}. Auto-built from commit ${{ github.sha }}. PC: Lumen-Setup / Lumen-Portable .exe. Mac: .dmg (Apple Silicon and Intel). Mac build is unsigned: right-click the app and choose Open the first time."

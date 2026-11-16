@@ -66,5 +66,6 @@
     "dmg": {
       "artifactName": "Lumen-${version}-${arch}.${ext}"
     }
-  }
+  },
+  "versionBuildOffset": 5
 }

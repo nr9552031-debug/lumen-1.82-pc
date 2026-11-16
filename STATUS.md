@@ -2,6 +2,8 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Claude (versions)
+- Added scripts/ci-version.js and build.yml steps so every build on main is versioned automatically (next build should be 1.8.3). UNVERIFIED until the build finishes; check the release title and file names.
 ### 2026-11-15 Codex (merged audit)
 - Merged `codex/projection-studio-audit` as PR #4 into `main` after the latest commit passed GitHub Actions on Ubuntu, macOS, and Windows. The merge is `75e1f1815c9050f09ff1c6282aa7ded210add857`.
 - `node test/projection.js`, syntax checks, and `git diff --check` pass locally. `npm test` locally is blocked by the WiZ fixture bind to `127.0.0.70:38899` (`EPERM`); GitHub CI passed the full workflow on all three OSes.
