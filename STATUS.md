@@ -2,6 +2,11 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (restore lifecycle)
+- Fixed two restore-ordering risks: Projection Lights now waits for its in-flight cloud command before sending the saved state, and concurrent Stop calls share one restoration operation. Native app quit now intercepts `before-quit` and waits for active drivers; window close no longer destroys the app after a fixed four-second race.
+- `node test/projection.js` passes an in-flight command ordering check with concurrent Stop calls; syntax checks and `git diff --check` pass. `npm test` still stops at the WiZ fixture bind restriction. The Electron app cannot run here (SIGABRT), so native quit and real-bulb restoration remain runtime-unverified.
+- Next: inspect per-shape controls and lights membership changes; continue with remaining error/recovery cases.
+
 ### 2026-11-15 Codex (layout persistence)
 - Fixed a debounce race that could redirect a pending shape/layout save to the newly selected project. Saves now capture per-project snapshots, coalesce edits for the same project, and flush before deletion.
 - `node test/projection.js` passes the edit-coalescing and cross-layout save checks as well as the existing projection cases. `npm test` still stops after that test at the WiZ fixture bind error; syntax checks and `git diff --check` pass.
@@ -33,6 +38,7 @@ Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else
 - VERIFIED (local, 2026-11-15): `node test/projection.js` passed the saved-project normalization/round-trip and restore-after-provider-failure checks.
 - VERIFIED (local, 2026-11-15): `node test/projection.js` passed the platform fallback policy checks for macOS no-track fallback, Windows unchanged behavior, explicit microphone selection, and permission refusal.
 - VERIFIED (local, 2026-11-15): `node test/projection.js` passed layout-save coalescing and cross-layout snapshot checks, covering the renderer's save-queue policy.
+- VERIFIED (local, 2026-11-15): `node test/projection.js` confirmed Stop waits for an in-flight simulated cloud update before restoring the original bulb state, including concurrent Stop calls.
 - UNVERIFIED: the full `npm test` suite cannot complete on this host. Its projection test passes, but the WiZ fixture cannot bind `127.0.0.70:38899` (`EPERM` in the sandbox and `EADDRNOTAVAIL` outside it).
 - UNVERIFIED: app launch; after `npm ci`, `npm start` exits with `SIGABRT` before the Studio UI is visible. The stack trace did not identify the cause.
 - VERIFIED (GitHub Actions run on main, commit 0e06276): the 3 WiZ simulated-bulb tests (wiz-caps, wiz-errors, wiz-multi) pass on Windows, macOS and Linux.
@@ -42,6 +48,7 @@ Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else
 
 ## Gaps found
 - Projection Studio has not yet had a full interactive run. Multi-display/fullscreen behavior, Esc close, WebGL rendering, and real bulb state restoration still need hands-on verification.
+- Native app quit and window-close restoration paths have code changes and hardware-free ordering coverage, but Electron's local SIGABRT prevents runtime verification of the actual app shutdown sequence.
 - macOS still does not provide system sound capture. Projection Studio now switches to Microphone if its system source produces no audio track; actual microphone capture and permission handling need a real-Mac check. Effects still requires the user to choose Microphone manually.
 - test/run.js, show.js, effects.js, av.js, ui.js, studio.js (previously run by `npm test`) are missing from this repo. An older copy of some (run.js, show.js, ui.js, shot.js) exists in the zip in the `lumennnnnnnnnnnn` repo (older source; must be checked against current code before use).
 - Mac system-sound capture is not implemented (Windows-only loopback).

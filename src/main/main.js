@@ -18,6 +18,11 @@ const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
 const startHidden = process.argv.includes('--hidden');
 let win, manager, store, fx, automation, tray = null, quitting = false;
 
+function stopDrivers() {
+  const pl = manager && manager.projLights, sp = manager && manager.showPlayer;
+  return [fx && fx.active ? fx.stop() : null, pl && pl.active ? pl.stop() : null, sp && sp.state !== 'idle' ? sp.stop() : null].filter(Boolean);
+}
+
 function createStore() {
   const crypto = {
     available: () => safeStorage.isEncryptionAvailable(),
@@ -49,10 +54,10 @@ function createWindow() {
     if (st.closeToTray && tray) { e.preventDefault(); win.hide(); return; }
     // Closing mid-show: give the lights their own state back first.
     if (projWin && !projWin.isDestroyed()) projWin.destroy();
-    const pl = manager.projLights, sp = manager.showPlayer, busy = [fx && fx.active ? fx.stop() : null, pl && pl.active ? pl.stop() : null, sp && sp.state !== 'idle' ? sp.stop() : null].filter(Boolean);
+    const busy = stopDrivers();
     if (busy.length) {
       e.preventDefault(); quitting = true;
-      Promise.race([Promise.allSettled(busy), new Promise((r) => setTimeout(r, 4000))]).finally(() => { if (win && !win.isDestroyed()) win.destroy(); });
+      Promise.allSettled(busy).finally(() => { if (win && !win.isDestroyed()) win.destroy(); });
     }
   });
 }
@@ -80,10 +85,10 @@ function refreshTray() {
   ]));
 }
 async function quit() {
+  if (quitting) return;
   quitting = true;
-  const pl = manager && manager.projLights, sp = manager && manager.showPlayer;
-  const busy = [fx && fx.active ? fx.stop() : null, pl && pl.active ? pl.stop() : null, sp && sp.state !== 'idle' ? sp.stop() : null].filter(Boolean);
-  if (busy.length) await Promise.race([Promise.allSettled(busy), new Promise((r) => setTimeout(r, 4000))]);
+  const busy = stopDrivers();
+  if (busy.length) await Promise.allSettled(busy);
   app.quit();
 }
 // "Start with Windows". For the portable build the real .exe is the one the user launched, not the unpacked copy.
@@ -200,5 +205,12 @@ app.whenReady().then(() => {
   setInterval(() => { if (!lightsBusy()) manager.scan(); }, 10 * 60 * 1000);
 });
 app.on('second-instance', showWindow);
-app.on('before-quit', () => { quitting = true; try { store.saveNow(); } catch {} });
+app.on('before-quit', (e) => {
+  try { store.saveNow(); } catch {}
+  if (quitting) return; // the tray/window paths already waited for active lighting to restore
+  // Native quit shortcuts (notably Cmd+Q on macOS) bypass the renderer's window-close path.
+  // Hold the quit until all active lighting drivers have completed their restore sequence.
+  e.preventDefault(); quitting = true;
+  Promise.allSettled(stopDrivers()).finally(() => app.quit());
+});
 app.on('window-all-closed', () => app.quit());

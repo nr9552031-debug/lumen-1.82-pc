@@ -24,6 +24,21 @@ async function main() {
   assert.strictEqual(writes[1].name, 'Second layout', 'switching layouts does not redirect a pending save');
   assert.strictEqual(ownerA.id, 'new-a', 'the new layout id is assigned to its owner');
 
+  // Stop must wait for a slow cloud write to settle before applying the pre-show state, otherwise
+  // the late show write can land after the restore command and leave the bulb changed.
+  const order = [];
+  const slowManager = {
+    devices: new Map([['bulb-slow', { id: 'bulb-slow', brand: 'hubspace', name: 'Slow bulb', online: true, on: true, brightness: 31, rgb: [7, 8, 9], mode: 'color', caps: { color: true, dim: true } }]]),
+    providers: { hubspace: { setState: async () => { await new Promise((resolve) => setTimeout(resolve, 25)); order.push('show-write'); } } },
+    _normalize: (_dev, p) => p, _emit: () => {},
+    apply: async () => { order.push('restore'); return { ok: 1, failed: 0 }; },
+  };
+  const slowLights = new ProjLights({ manager: slowManager, now: () => 1000 });
+  slowLights.start({ smooth: 0 });
+  slowLights.frame({ 'bulb-slow': { rgb: [100, 40, 20], bri: 80 } });
+  await Promise.all([slowLights.stop(), slowLights.stop()]);
+  assert.deepStrictEqual(order, ['show-write', 'restore'], 'the restore command follows the in-flight show command');
+
   // Verify every animation in the picker has a matching shader and is placed in exactly one picker group.
   const renderWindow = {
     LumenProj: PJ,
