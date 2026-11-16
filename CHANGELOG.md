@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased (2026-11-16)
+- Projection Studio: strengthen the common palette grade and saturation so animations use more vivid, psychedelic color on both preview and projector.
 - Projection Studio: add saved Low/Medium/High render quality to preview and projector, 8MP backing-canvas caps, 5/4/3-octave fBm tiers, and adaptive one-step fallback with a six-second stable recovery. New geometry buffers upload only when a mapped shape changes.
 - Projection Lights: initialize picture-following ramps from the saved live light state and cap each ordinary RGB/brightness command according to its provider interval; keep brand rate limits and Stop restoration.
 - Projection Studio: add Wall Tide, Ripple Choir, Ribbon Weave, Murmuration, Frame Drips, and Cell Garden with per-effect audio/evolution profiles; add a saved Ripple Reveal transition. Keep all 35 previous animation IDs and their layouts intact.

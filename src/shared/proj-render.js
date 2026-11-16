@@ -52,8 +52,8 @@ void main(){vec2 p=(u*2.-1.)*vec2(ASP,1.);
  float rr=length(p),ring=exp(-pow((rr-SHOCKR*1.9)*6.,2.))*SHOCKA;p*=1.-.11*ring;
  p+=SHIM*.012*vec2(sin(p.y*38.+T*9.),cos(p.x*38.-T*8.));
  p+=DETAIL*.006*vec2(sin(p.y*47.+PHASE*9.),cos(p.x*43.-PHASE*8.));
- vec3 c=hue(fx(p,T),H+TINT*1.2);float rawL=clamp(dot(c,vec3(.299,.587,.114)),0.,1.);c=mix(c,texture2D(PALETTE,vec2(fract(rawL+SHIFT+TINT*.08),.5)).rgb,.32);c=c*B*(1.+A*.45+ring*.35+DROP*.3)+K*.12;c=max(c,0.);c=mix(c,.8+.2*(1.-exp(-(c-.8)*5.)),step(.8,c));c+=(h1(gl_FragCoord.xy+fract(T)*61.)-.5)/200.;c=clamp(c,0.,1.);
- float lum=dot(c,vec3(.299,.587,.114));c=mix(c,clamp(mix(vec3(lum),c,1.3)*(1.+.1*MOOD),0.,1.),max(MOOD,0.)*.55);c=mix(c,mix(vec3(lum),c,.82)*.93,max(-MOOD,0.)*.45);
+ vec3 c=hue(fx(p,T),H+TINT*1.2);float rawL=clamp(dot(c,vec3(.299,.587,.114)),0.,1.);c=mix(c,texture2D(PALETTE,vec2(fract(rawL+SHIFT+TINT*.08),.5)).rgb,.72);c=c*B*(1.+A*.45+ring*.35+DROP*.3)+K*.12;c=max(c,0.);c=mix(c,.8+.2*(1.-exp(-(c-.8)*5.)),step(.8,c));c+=(h1(gl_FragCoord.xy+fract(T)*61.)-.5)/200.;c=clamp(c,0.,1.);
+ float lum=dot(c,vec3(.299,.587,.114));c=clamp(vec3(lum)+(c-vec3(lum))*1.65,0.,1.);c=mix(c,clamp(mix(vec3(lum),c,1.55)*(1.+.1*MOOD),0.,1.),max(MOOD,0.)*.55);c=mix(c,mix(vec3(lum),c,1.12)*.98,max(-MOOD,0.)*.45);
  float al=O;if(XF.z>.5){float m=xfm(u,XF.x,XF.y);al=XF.z<1.5?(MODE==0?O*(1.-m)/max(1e-4,1.-O*m):O*(1.-m)):O*m;}
  if(MODE==0)gl_FragColor=vec4(c,al);else gl_FragColor=vec4(c*al,1.);}`;
   // p: centred coordinates (y from -1 to 1), u: 0..1 across the shape, t: seconds, A: audio drive 0..1, K: beat flash 0..1

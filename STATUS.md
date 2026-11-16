@@ -2,6 +2,10 @@
 Last updated: 2026-11-16. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-16 Codex (vivid Projection Studio color grade)
+- Owner reported washed-out animation colors and asked for intense psychedelic colors. Increased the common shader's shared-palette influence from 32% to 72%, added a stronger chroma grade, and kept the change in the common renderer used by preview and projector. Added a source assertion for the grade.
+- `node test/projection.js` passes, including the new common-shader vivid-grade assertion. `npm test` passes Projection checks then stops at the known local WiZ simulator bind (`EPERM 127.0.0.70:38899`). Shader appearance still needs an owner eye-check on Mac and PC because this host cannot launch the Electron UI or compile/render GLSL.
+
 ### 2026-11-16 Codex (animation overhaul milestone 5 quality, performance, and light output)
 - Added project-saved Low/Medium/High quality (Medium for old layouts), per-frame automatic downgrade after 1.2 seconds below 50fps, one-tier recovery after six stable seconds, and a 4096-edge/8MP backing-buffer cap in preview and projector. Quality also selects 3/4/5 fBm octaves. Preview now targets a 16ms loop. Visuals shows the preview tier; projector briefly reports tier changes.
 - Cached each unchanged shape's WebGL vertex buffer and point coordinates, avoiding per-frame JSON key construction and repeated geometry upload. Buffers are deleted when stale and rebuilt after context restore. Projection Lights now starts its ramp from saved RGB or Kelvin-derived white and caps normal picture-following RGB/brightness changes based on the actual provider interval; Stop still restores the original snapshot.

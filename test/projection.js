@@ -182,6 +182,7 @@ async function main() {
   assert(renderSource.includes('this.geo.get(r.id), same = !!g && g.pts.length === r.pts.length') && !renderSource.includes('JSON.stringify(r.pts)'), 'stable shape geometry avoids per-frame string allocations');
   assert(renderSource.includes('gl.bufferData(gl.ARRAY_BUFFER, data, buffer === this.buf ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW)'), 'unchanged shape buffers are uploaded once and reused');
   assert(renderSource.includes('uniform1f(pr.U.SHIFT, st.hue / 360)') && renderSource.includes('fract(rawL+SHIFT+TINT*.08)'), 'shape colour shift continues to move through the selected palette');
+  assert(renderSource.includes(')).rgb,.72)') && renderSource.includes('(c-vec3(lum))*1.65'), 'shared shader applies a strong palette wash and saturation boost for vivid projection colours');
   for (const id of ['aurora', 'fire', 'smoke', 'clouds', 'ocean', 'waves', 'flow', 'lava', 'rain', 'snow', 'rays']) {
     const marker = `${id}: \``; const start = renderSource.indexOf(marker) + marker.length, end = renderSource.indexOf('`', start), shader = renderSource.slice(start, end);
     assert(start >= marker.length && end > start, `${id} flow shader source remains present`);
