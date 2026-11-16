@@ -52,7 +52,7 @@
         "dmg",
         "zip"
       ],
-      "identity": null,
+      "identity": "-",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "artifactName": "Lumen-mac-${arch}-${version}.${ext}",

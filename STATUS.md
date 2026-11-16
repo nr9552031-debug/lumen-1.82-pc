@@ -2,6 +2,10 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Claude (later)
+- Owner tried the Mac build: macOS said "Lumen is damaged and can't be opened" (unsigned app with download quarantine). Set `build.mac.identity` to "-" (ad-hoc signing) in package.json so the next Mac build is signed. UNVERIFIED until the owner tries the new build from the `latest` release.
+- Codex has an unmerged branch `codex/mac-system-audio` (commit "Add macOS system audio capture support", based on an older main). Needs review before merging: it changes package-lock.json heavily.
+- Next: owner retests Mac build; then review/merge the Codex branch; then restore missing tests.
 ### 2026-11-15 Claude
 - Restructured the repo (app now at repo root), added CI and automatic PC + Mac builds to the `latest` release, added these docs and the shared engineering rules.
 - Merged the engineering rules from the owner's Claude project into AGENTS.md. Replaced HANDOFF.md/TASKS.md with this STATUS.md session log and TODO.md.
