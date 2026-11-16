@@ -129,6 +129,14 @@ async function main() {
     const bounds = [...shader.matchAll(/for\(int\s+\w+=\d+;\s*\w+<([0-9]+);/g)].map((m) => +m[1]);
     assert(bounds.length > 0 && Math.max(...bounds) <= 16, `${id} uses a bounded small shader loop`);
   }
+  for (const id of ['warp', 'portal', 'energy', 'fractal', 'kaleido', 'tunnel', 'synth', 'rings', 'laser', 'disco', 'hex']) {
+    const marker = `${id}: \``; const start = renderSource.indexOf(marker) + marker.length, end = renderSource.indexOf('`', start), shader = renderSource.slice(start, end);
+    assert(start >= marker.length && end > start, `${id} geometry shader source remains present`);
+    assert(shader.includes('pal(') && /\b(A|SWELL|EMIT|TURB|SHIM|HIT)\b/.test(shader), `${id} uses shared palette and audio controls`);
+    const bounds = [...shader.matchAll(/for\(int\s+\w+=\d+;\s*\w+<([0-9]+);/g)].map((m) => +m[1]);
+    assert(bounds.every((v) => v <= 28), `${id} shader loops remain constant and bounded`);
+  }
+  assert(renderSource.includes('for(int i=0;i<28;i++)'), 'fractal escape iterations are reduced to a fixed cap of 28');
   const editorSource = fs.readFileSync(path.join(__dirname, '../src/renderer/projection.js'), 'utf8');
   assert(editorSource.includes('data-palette') && editorSource.includes('pj.cur.palette = PJ.paletteId(t.value)'), 'Visuals tab persists the selected shared palette');
   const grouped = PJ.GROUPS.flatMap((g) => g[1]);
