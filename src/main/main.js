@@ -20,7 +20,7 @@ let win, manager, store, fx, automation, tray = null, quitting = false;
 
 function stopDrivers() {
   const pl = manager && manager.projLights, sp = manager && manager.showPlayer;
-  return [fx && fx.active ? fx.stop() : null, pl && pl.active ? pl.stop() : null, sp && sp.state !== 'idle' ? sp.stop() : null].filter(Boolean);
+  return [fx && fx.active ? fx.stop() : null, pl && (pl.active || pl.snapshot.size) ? pl.stop() : null, sp && sp.state !== 'idle' ? sp.stop() : null].filter(Boolean);
 }
 
 function createStore() {

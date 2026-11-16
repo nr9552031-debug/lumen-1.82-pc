@@ -2,6 +2,11 @@
 Last updated: 2026-11-15. VERIFIED = has real test/log evidence. Everything else is UNVERIFIED.
 
 ## Session log (newest first; every agent adds an entry after every update)
+### 2026-11-15 Codex (shutdown retry)
+- Updated native quit/close cleanup to retry Projection Lights restoration whenever saved bulb snapshots remain, including after an earlier failed Stop.
+- `node --check src/main/main.js` and `node test/projection.js` pass; `npm test` still passes Projection tests and stops at the WiZ fixture bind restriction.
+- Next: continue checking remaining renderer and driver lifecycle cases; actual shutdown restore still requires real app and bulbs.
+
 ### 2026-11-15 Codex (asynchronous layout ownership)
 - Fixed two layout-switch races: delayed Room photo decoding now updates the project that selected the file, and beat-scheduled animation changes are discarded if the user has switched projects or removed the shape before the beat. Added hardware-free checks for both ownership guards.
 - `node test/projection.js` and syntax checks pass. `npm test` again passes Projection checks and stops at the WiZ fixture bind (`EPERM`, `127.0.0.70:38899`).
