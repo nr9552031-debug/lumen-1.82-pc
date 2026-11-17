@@ -7,7 +7,7 @@ const PQ = window.LumenProjQuality;
 const pj = { list: null, cur: null, sel: null, tab: 'visuals', undo: [], canvas: null, R: null, timer: null, n: 0, running: false, add: null, drag: null,
   cap: null, feat: null, displays: [], display: '', platform: '', out: { open: false }, thumbs: {}, thumbBusy: false, dom: null, regional: {}, sent: {}, restoreFailed: [], err: '', sample: null, lastTargets: {},
   // 1.7 audiovisual engine
-  eng: null, dir: null, sched: null, ov: {}, live: null, rf: null, beatLatch: false, dropLatch: false, shownBeat: 0, cuedBeat: 0, lat: [], thumbCol: {}, next: null, last: null, adv: false, calib: null, sync: {}, fakeF: null, qmon: null, qkey: '', qAt: 0 };
+  eng: null, dir: null, sched: null, ov: {}, live: null, rf: null, beatLatch: false, dropLatch: false, shownBeat: 0, cuedBeat: 0, lat: [], thumbCol: {}, next: null, last: null, adv: false, calib: null, sync: {}, fakeF: null, qmon: null, qkey: '', qAt: 0, phoneScan: null, scanRunBusy: false, scanRunStatus: '', processedScans: new Set() };
 window.addEventListener('resize', () => { if (pj.R && $('#pjRoot')) pj.R.resize(); });
 const PJD = window.LumenDirector, PJF = window.LumenFeatures, PJS = window.LumenSched;
 const pjSel = () => pj.cur && pj.cur.regions.find((r) => r.id === pj.sel);
@@ -18,6 +18,176 @@ const pjSaveQueue = LumenProjSave.createSaveQueue(
   (owner, saved) => { owner.id = saved.id; if (pj.list && !pj.list.some((p) => p.id === saved.id)) pj.list.push(owner); if (pj.cur === owner) pjBar(); },
   (error, owner) => { pj.err = error.message; if (pj.cur === owner) pjStatus(); },
 );
+const pjComfyDefaults = () => ({ url: 'http://127.0.0.1:8188', raw: '', prompt: '', autoWorkflow: false, status: 'Ready to build a scan workflow from the nodes and models installed in ComfyUI.', bindings: {}, validation: null, promptId: '', promptUrl: '', historyEntry: null });
+let pjComfySaveTimer = null;
+let pjComfySaveChain = Promise.resolve();
+const pjComfyConfig = (value) => ({ url: value.url, raw: value.raw, prompt: value.prompt || '', autoWorkflow: !!value.autoWorkflow, bindings: { ...(value.bindings || {}) }, promptId: value.promptId || '', promptUrl: value.promptUrl || '' });
+function pjPersistComfyConfig(project, value) {
+  const save = () => call('comfy:project-config:save', project.id, pjComfyConfig(value));
+  const pending = pjComfySaveChain.catch(() => {}).then(save);
+  pjComfySaveChain = pending;
+  return pending;
+}
+async function pjFlushComfyConfig(project = pj.cur, value = pj.comfy) {
+  if (pjComfySaveTimer) { clearTimeout(pjComfySaveTimer); pjComfySaveTimer = null; }
+  if (!project || !project.id || !value || !pj.comfyConfigLoaded || pj.comfyProjectId !== project.id) return;
+  await pjPersistComfyConfig(project, value);
+}
+function pjScheduleComfySave() {
+  const project = pj.cur, value = pj.comfy;
+  if (!project || !project.id || !value || !pj.comfyConfigLoaded || pj.comfyProjectId !== project.id) return;
+  if (pjComfySaveTimer) clearTimeout(pjComfySaveTimer);
+  const snapshot = pjComfyConfig(value);
+  pjComfySaveTimer = setTimeout(() => {
+    pjComfySaveTimer = null;
+    pjPersistComfyConfig(project, snapshot).catch((error) => {
+      if (pj.cur === project && pj.comfy) { pj.comfy.status = `Could not save workflow settings: ${error.message}`; pjPanel(); }
+    });
+  }, 400);
+}
+async function pjLoadComfyConfig(project) {
+  pj.comfy = pjComfyDefaults();
+  pj.comfyProjectId = project && project.id || '';
+  pj.comfyConfigLoaded = !project || !project.id;
+  if (!project || !project.id) return;
+  try {
+    const saved = await call('comfy:project-config:get', project.id);
+    if (pj.cur !== project) return;
+    pj.comfy = { ...pjComfyDefaults(), ...saved, bindings: saved.bindings || {}, validation: null, historyEntry: null };
+    pj.comfyConfigLoaded = true;
+  } catch (error) {
+    if (pj.cur === project) pj.comfy.status = `Could not load workflow settings: ${error.message}`;
+    pj.comfyConfigLoaded = false;
+  }
+}
+
+function pjScanRunStatus(message) {
+  pj.scanRunStatus = message;
+  const el = $('#pjScanPipelineStatus'); if (el) el.textContent = message;
+}
+async function pjLoadScanPreview(target, host, status) {
+  status.textContent = 'Loading geometry and linked assets…';
+  const sources = [pj.phoneScan && pj.phoneScan.scan, ...(pj.scanList || [])].filter(Boolean), scan = sources.find((s) => s.id === target.scan);
+  const model = scan && scan.files.find((f) => f.name === target.name);
+  if (!model) throw new Error('That scan model is no longer available in this project.');
+  let total = model.size || 0;
+  const dependencies = await call('phone-scan:dependencies', target.scan, target.name), resources = [];
+  for (const dependency of dependencies) {
+    total += dependency.size;
+    if (total > 100 * 1024 * 1024) throw new Error('The model and linked assets must total no more than 100 MB to preview.');
+    resources.push(await call('phone-scan:read', target.scan, dependency.name));
+  }
+  const file = await call('phone-scan:read', target.scan, target.name);
+  const meshes = await window.LumenScanPreview.load(host, file, (_id, name) => { status.textContent = `Selected mesh: ${name}`; }, resources);
+  status.textContent = `Loaded ${meshes.length} independently selectable mesh${meshes.length === 1 ? '' : 'es'} with ${dependencies.length} linked asset${dependencies.length === 1 ? '' : 's'}.`;
+}
+function pjScanBindings(candidates, saved) {
+  if (!candidates.length) throw new Error('The saved ComfyUI workflow has no image-upload input. Import an API workflow with a Load Image node first.');
+  const used = new Set(), bindings = {};
+  for (const role of ['photo', 'mask']) {
+    const current = saved[role];
+    let candidate = current && candidates.find((x) => x.nodeId === String(current.nodeId) && x.inputName === current.inputName && !used.has(`${x.nodeId}:${x.inputName}`));
+    if (!candidate && (role === 'photo' || candidates.length > 1)) {
+      const hint = role === 'mask' ? /mask|matte|alpha/i : /photo|base|source|init/i;
+      candidate = candidates.find((x) => !used.has(`${x.nodeId}:${x.inputName}`) && hint.test(`${x.currentName || ''} ${x.classType} ${x.inputName}`));
+      if (!candidate && role === 'photo') candidate = candidates.find((x) => !used.has(`${x.nodeId}:${x.inputName}`) && !/mask|matte|alpha/i.test(`${x.currentName || ''} ${x.classType} ${x.inputName}`));
+      if (!candidate) candidate = candidates.find((x) => !used.has(`${x.nodeId}:${x.inputName}`));
+    }
+    if (candidate) { bindings[role] = { nodeId: candidate.nodeId, inputName: candidate.inputName }; used.add(`${candidate.nodeId}:${candidate.inputName}`); }
+  }
+  return bindings;
+}
+async function pjRunScanProjection(target) {
+  if (pj.scanRunBusy) return;
+  const project = pj.cur, C = pj.comfy || pjComfyDefaults();
+  pj.scanRunBusy = true; pjScanRunStatus('Saving the scan to this project…'); pjPanel();
+  const stillCurrent = () => { if (pj.cur !== project) throw new Error('The selected project changed. Reopen its scan tab and run the scan again.'); };
+  try {
+    await pjEnsureSaved(); stillCurrent();
+    if (!window.LumenScanPreview || typeof window.LumenScanPreview.capture !== 'function') throw new Error('Scan image rendering is unavailable. Restart Lumen and try again.');
+    await pjLoadScanPreview(target, $('#pjScanViewport'), $('#pjScanSelection')); stillCurrent();
+    pjScanRunStatus('Rendering the scan photo and surface mask…');
+    const images = await window.LumenScanPreview.capture(); stillCurrent();
+    const stem = target.name.replace(/\.[^.]+$/, '').replace(/[^\w.-]/g, '_').slice(0, 72) || 'scan';
+    const [photo, mask] = await Promise.all([
+      call('comfy:upload-png', C.url, `${stem}_photo.png`, images.photo, 'photo', project.id),
+      call('comfy:upload-png', C.url, `${stem}_mask.png`, images.mask, 'mask', project.id),
+    ]);
+    pj.inputAssets = [...(pj.inputAssets || []).filter((x) => x.projectId !== project.id), photo.asset, mask.asset];
+    C.photoName = photo.name; C.photoPath = photo.localPath; C.maskName = mask.name; C.maskPath = mask.localPath;
+    if (!C.raw || C.autoWorkflow) {
+      pjScanRunStatus('Building an inpainting workflow from ComfyUI’s installed nodes and checkpoint…');
+      const built = await call('comfy:scan-workflow', C.url, photo.name, mask.name, C.prompt || ''); stillCurrent();
+      C.raw = built.raw; C.bindings = built.bindings; C.autoWorkflow = true; await pjFlushComfyConfig(project, C);
+    }
+    pjScanRunStatus('Checking the installed ComfyUI workflow and matching its image inputs…');
+    const initial = await call('comfy:check', C.url, C.raw, { bindings: {}, assets: {} }); stillCurrent();
+    C.bindings = pjScanBindings(initial.imageInputs || [], C.bindings || {});
+    const assets = { photo: C.photoName };
+    if (C.bindings.mask) assets.mask = C.maskName;
+    const options = { bindings: C.bindings, assets };
+    C.validation = await call('comfy:check', C.url, C.raw, options); stillCurrent();
+    if (C.validation.missing.length) throw new Error(`ComfyUI is missing workflow nodes: ${C.validation.missing.join(', ')}.`);
+    if (C.validation.issues.length) throw new Error(`The workflow could not be run automatically: ${C.validation.issues.slice(0, 3).join(' ')}`);
+    C.status = 'Scan photo and mask uploaded. Queueing the saved workflow…';
+    pjScanRunStatus(C.status); pjPanel();
+    const queued = await call('comfy:queue', C.url, C.raw, options); stillCurrent();
+    C.promptId = queued.promptId; C.promptUrl = C.url; C.historyEntry = null; await pjFlushComfyConfig(project, C);
+    const started = Date.now(), limit = 30 * 60 * 1000;
+    while (Date.now() - started < limit) {
+      await new Promise((resolve) => setTimeout(resolve, 2000)); stillCurrent();
+      const entry = await call('comfy:history', C.promptUrl, C.promptId);
+      if (!entry) { pjScanRunStatus('ComfyUI is queued or generating…'); continue; }
+      const runStatus = entry.status || {}, hasMedia = Object.values(entry.outputs || {}).some((node) => node && ['images', 'gifs', 'videos'].some((key) => Array.isArray(node[key]) && node[key].length));
+      if (runStatus.status_str === 'error') {
+        const details = (runStatus.messages || []).flatMap((m) => Array.isArray(m) ? m.slice(1) : []).map((m) => typeof m === 'string' ? m : JSON.stringify(m)).join(' ').slice(0, 500);
+        throw new Error(`ComfyUI workflow failed${details ? `: ${details}` : '.'}`);
+      }
+      if (runStatus.completed === true || runStatus.status_str === 'success') {
+        if (!hasMedia) throw new Error('ComfyUI finished without an image or video output. Add a Save Image or video output node to the workflow.');
+        C.historyEntry = entry; break;
+      }
+      pjScanRunStatus('ComfyUI is generating the projection…');
+    }
+    if (!C.historyEntry) throw new Error('ComfyUI did not finish within 30 minutes. The job may still be running; check its queue in ComfyUI.');
+    pjScanRunStatus('Collecting generated media…');
+    const saved = await call('comfy:save-outputs', C.promptUrl, C.promptId, project.id); stillCurrent();
+    const generated = (saved.outputs || []).filter((x) => x.projectId === project.id && x.promptId === C.promptId);
+    pj.generated = [...(pj.generated || []).filter((x) => x.promptId !== C.promptId), ...generated];
+    if (!generated.length) throw new Error(saved.status || 'ComfyUI finished, but no generated media could be saved.');
+    const media = generated.find((x) => x.mediaType === 'image' || x.mediaType === 'video');
+    C.status = `${saved.status} Starting the TouchDesigner handoff…`;
+    await pjFlushComfyConfig(project, C);
+    window.dispatchEvent(new CustomEvent('lumen:td-projection', { detail: { mediaPath: media.path, photoPath: C.photoPath, maskPath: C.maskPath, autoRun: true } }));
+    pjScanRunStatus(`${saved.status} Handed the result to TouchDesigner.`);
+  } catch (error) {
+    C.status = error.message || 'The automatic scan pipeline failed.';
+    pjScanRunStatus(C.status);
+  } finally {
+    pj.scanRunBusy = false; pjPanel();
+  }
+}
+function pjOnPhoneScan(status) {
+  const wasActive = !!(pj.phoneScan && pj.phoneScan.active);
+  pj.phoneScan = status;
+  if (wasActive && status && !status.active && status.scan && status.scan.files && status.scan.files.length && !pj.processedScans.has(status.scan.id)) {
+    pj.processedScans.add(status.scan.id);
+    const scan = status.scan, project = pj.cur;
+    if (scan.projectId && scan.projectId !== project.id) pjScanRunStatus('The scan was saved to a different Projection Studio project. Open that project to process it.');
+    else {
+      project.scans = [...new Set([...(project.scans || []), scan.id])].slice(-50); pjSave();
+      call('phone-scan:list').then((list) => { pj.scanList = list; if (pj.tab === 'scan') pjPanel(); }).catch(() => {});
+      const model = scan.files.find((f) => f.type === 'model');
+      if (model) {
+        pj.tab = 'scan';
+        if (view.t !== 'proj') go('proj'); else { pjTabs(); pjPanel(); }
+        setTimeout(() => pjRunScanProjection({ scan: scan.id, name: model.name }), 0);
+      }
+      else pjScanRunStatus('Scan saved. It contains no 3D model file to project.');
+    }
+  }
+  if ($('#pjRoot') && pj.tab === 'scan') pjPanel();
+}
 
 /* ---------- data ---------- */
 async function pjInit() {
@@ -29,8 +199,18 @@ async function pjInit() {
   pj.displays = await call('proj:displays'); const ext = pj.displays.find((d) => !d.primary); pj.display = (ext || pj.displays[0] || {}).id || '';
   const st = await call('proj:status'); pj.out = st.output; pj.running = st.lights.active;
   if (window.lumen.onProj) window.lumen.onProj((s) => { pj.out = s; pjBar(); });
+  if (window.lumen.onPhoneScan) window.lumen.onPhoneScan(pjOnPhoneScan);
+  pj.phoneScan = await call('phone-scan:status');
+  pj.scanList = await call('phone-scan:list');
+  pj.generated = pj.cur.id ? await call('comfy:generated', pj.cur.id) : [];
+  pj.inputAssets = pj.cur.id ? await call('comfy:input-assets', pj.cur.id) : [];
+  await pjLoadComfyConfig(pj.cur);
 }
 const pjSave = () => { if (pj.cur) pjSaveQueue.queue(pj.cur, pj.cur); };
+async function pjEnsureSaved() {
+  pjSave(); await pjSaveQueue.flush();
+  if (!pj.cur.id) { const saved = await call('proj:save', pj.cur); Object.assign(pj.cur, saved); if (!pj.list.some((x) => x.id === saved.id)) pj.list.push(pj.cur); pjBar(); await pjLoadComfyConfig(pj.cur); }
+}
 // What is shown: the saved project, or in Autonomous mode a live copy with the director's choices on top.
 const pjView = () => (pj.cur.mode === 'auto' && pj.live ? pj.live : pj.cur);
 function pjLive() {
@@ -42,7 +222,23 @@ const pjPush = throttle(pjPushNow, 60);
 function pjChanged(repaint) { pjLive(); pjSvg(); pjPush(); pjSave(); if (repaint) pjPanel(); pjStatus(); }
 function pjSnap() { pj.undo.push(JSON.stringify(pj.cur.regions)); if (pj.undo.length > 60) pj.undo.shift(); }
 function pjUndo() { const s = pj.undo.pop(); if (!s) return; pj.cur.regions = JSON.parse(s).map(PJ.region); if (!pjSel()) pj.sel = null; pjChanged(true); }
-function pjOpen(p) { pj.cur = p; pj.sel = p.regions[0] ? p.regions[0].id : null; pj.undo = []; pj.add = null; pj.ov = {}; pj.qkey = ''; pjDirector(true); pjLive(); pjPaint(); pjPush(); }
+async function pjOpen(p, { savePrevious = true } = {}) {
+  if (savePrevious && pj.cur) {
+    try { await pjFlushComfyConfig(pj.cur); }
+    catch (error) { if (pj.comfy) pj.comfy.status = `Could not save workflow settings: ${error.message}`; pjPanel(); return false; }
+  }
+  pj.cur = p; pj.sel = p.regions[0] ? p.regions[0].id : null; pj.undo = []; pj.add = null; pj.ov = {}; pj.qkey = ''; pj.generated = []; pj.inputAssets = []; pj.comfy = pjComfyDefaults(); pj.comfyProjectId = p.id || ''; pj.comfyConfigLoaded = !p.id;
+  if (p.id) {
+    try {
+      const [files, assets, config] = await Promise.all([call('comfy:generated', p.id), call('comfy:input-assets', p.id), call('comfy:project-config:get', p.id)]);
+      if (pj.cur !== p) return false;
+      pj.generated = files; pj.inputAssets = assets; pj.comfy = { ...pjComfyDefaults(), ...config, bindings: config.bindings || {}, validation: null, historyEntry: null };
+      pj.comfyConfigLoaded = true;
+    } catch (error) { if (pj.cur === p) pj.comfy.status = `Could not load project workflow data: ${error.message}`; pj.comfyConfigLoaded = false; }
+  }
+  pjDirector(true); pjLive(); pjPaint(); pjPush();
+  return true;
+}
 
 /* ---------- drawing loop: preview, colour sampling, light targets ---------- */
 function pjEnsureLoop() {
@@ -192,7 +388,7 @@ function pjBar() {
     <span class="pj-modesel" role="group" aria-label="How the projection is driven">${[['manual', 'Manual', 'Animations run on their own'], ['reactive', 'Music reactive', 'The music performs every animation'], ['auto', 'Autonomous', 'Lumen directs the whole show to the music']].map(([k, n, d]) => `<button class="${pj.cur.mode === k ? 'on' : ''}" data-mode="${k}" data-tip="${d}">${n}</button>`).join('')}</span>
     <button class="btn pri pj-play" data-a="${pj.running ? 'stop' : 'play'}">${pj.running ? '■ Stop' : '▶ Play'}</button>`;
 }
-function pjTabs() { const t = $('#pjTabs'); if (t) t.innerHTML = [['visuals', 'Visuals'], ['auto', 'Autonomous'], ['mapping', 'Mapping'], ['lights', 'Lights'], ['audio', 'Audio']].map(([k, l]) => `<button class="${k === pj.tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join(''); }
+function pjTabs() { const t = $('#pjTabs'); if (t) t.innerHTML = [['visuals', 'Visuals'], ['scan', 'Phone Scan'], ['ai', 'AI Pipeline'], ['auto', 'Autonomous'], ['mapping', 'Mapping'], ['lights', 'Lights'], ['audio', 'Audio']].map(([k, l]) => `<button class="${k === pj.tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join(''); }
 function pjStatus() {
   const el = $('#pjStatus'); if (!el) return;
   const mode = PJ.LIGHT_MODES.find((m) => m[0] === pj.cur.lights.mode)[1], sent = Object.keys(pj.sent || {}).filter((b) => pj.sent[b]).map((b) => `${BRANDS[b] || b} ${pj.sent[b]}`).join(', ');
@@ -205,6 +401,95 @@ function pjPanel() {
   const el = $('#pjPanel'); if (!el) return; const r = pjSel(), L = pj.cur.lights, A = pj.cur.audio;
   const none = '<div class="note"><span>Click a shape on the stage to work on it, or add one on the Mapping tab.</span></div>';
   if (pj.tab === 'auto') { el.innerHTML = pjAutoPanel(); pjAutoLive(); return; }
+  if (pj.tab === 'scan') {
+    const S = pj.phoneScan || { active: false, scan: null };
+    const first = S.addresses && S.addresses[0];
+    const attached = (pj.scanList || []).filter((s) => (pj.cur.scans || []).includes(s.id));
+    const sources = [...(S.scan && S.scan.files.length ? [S.scan] : []), ...attached];
+    const modelFiles = sources.flatMap((s) => (s.files || []).filter((f) => f.type === 'model').map((f) => ({ scan:s.id, name:f.name })));
+    el.innerHTML = `<div class="sect">Connect a phone</div><p class="muted pj-p">Put the phone and computer on the same Wi-Fi. Open the address below on the phone, enter the eight-digit code, and send exported scan files. Pairing expires after 10 minutes. When the phone reports upload complete, Lumen saves the scan and automatically runs the configured ComfyUI workflow.</p><div class="row pj-wrap"><button class="btn pri" data-scan="${S.active ? 'stop' : 'start'}">${S.active ? 'Stop phone pairing' : 'Start phone pairing'}</button></div>${S.active ? `<div class="f"><label>Phone upload address</label><input readonly value="${esc(first ? `http://${first}:${S.port}/?code=${S.code}` : `http://<computer-ip>:${S.port}/?code=${S.code}`)}" onclick="this.select()"></div><div class="f"><label>Pairing code</label><strong style="font-size:24px;letter-spacing:3px">${esc(S.code)}</strong></div>` : ''}<div class="sect">Received files</div>${S.scan && S.scan.files.length ? `<p class="muted pj-p">Current scan: ${esc(S.scan.id)}</p><ul>${S.scan.files.map((f) => `<li>${esc(f.name)} · ${(f.size / 1048576).toFixed(1)} MB · ${esc(f.type)}</li>`).join('')}</ul><p class="muted pj-p">Keep accompanying buffers, materials, and textures in the same phone upload. Upload completion automatically starts image rendering and generation.</p>` : '<p class="muted pj-p">No files received in this pairing yet. Lumen accepts OBJ/MTL, GLB/GLTF 2.0, PLY and common linked buffers and textures.</p>'}${attached.length ? `<div class="sect">Saved scans for ${esc(pj.cur.name)}</div>${attached.map((s) => `<div class="note"><span>${esc(s.id)} · ${new Date(s.createdAt).toLocaleString()}<br>${s.files.map((f) => esc(f.name)).join(', ')}</span></div>`).join('')}` : ''}<div class="sect">3D model</div><div class="row pj-wrap"><select id="pjScanModel">${modelFiles.map((f,i)=>`<option value="${i}">${esc(f.name)} · ${esc(f.scan)}</option>`).join('')||'<option value="">No model file in this project</option>'}</select><button class="btn" id="pjScanPreview" ${modelFiles.length?'':'disabled'}>Preview</button><button class="btn pri" id="pjScanRun" ${modelFiles.length && !pj.scanRunBusy?'':'disabled'}>${pj.scanRunBusy?'Processing scan…':'Run scan automatically'}</button></div><div id="pjScanViewport"></div><p id="pjScanSelection" class="muted pj-p"></p><p id="pjScanPipelineStatus" class="muted pj-p">${esc(pj.scanRunStatus || '')}</p><p class="muted pj-p">After the initial ComfyUI API workflow is saved in AI Pipeline, a phone upload automatically creates the scan photo and mask, runs generation, saves the output and prepares TouchDesigner. Drag to rotate, scroll to zoom, click a mesh to select it. Manual runs use the selected scan above.</p>`;
+    $('#pjScanPreview',el).onclick=async()=>{const target=modelFiles[Number($('#pjScanModel',el).value)];if(!target)return;try{await pjLoadScanPreview(target,$('#pjScanViewport',el),$('#pjScanSelection',el));}catch(e){$('#pjScanSelection',el).textContent=e.message;}};
+    $('#pjScanRun',el).onclick=async()=>{const target=modelFiles[Number($('#pjScanModel',el).value)];if(target)await pjRunScanProjection(target);};
+    const button = $('[data-scan]', el); button.onclick = async () => { try { if (button.dataset.scan === 'start') { pjSave(); await pjSaveQueue.flush(); pj.phoneScan = await call('phone-scan:start', pj.cur.id); } else { pj.phoneScan = await call('phone-scan:stop'); pj.scanList = await call('phone-scan:list'); if (pj.phoneScan.scan && pj.phoneScan.scan.files.length) { pj.cur.scans = [...new Set([...(pj.cur.scans || []), pj.phoneScan.scan.id])].slice(-50); pjSave(); } } } catch (e) { pj.err = e.message; } pjPanel(); };
+    return;
+  }
+  if (pj.tab === 'ai') {
+    pj.comfy = pj.comfy || pjComfyDefaults();
+    const C = pj.comfy;
+    C.bindings = C.bindings || {};
+    const photoAsset = (pj.inputAssets || []).find((x) => x.projectId === pj.cur.id && x.role === 'photo');
+    const maskAsset = (pj.inputAssets || []).find((x) => x.projectId === pj.cur.id && x.role === 'mask');
+    C.photoName = photoAsset && photoAsset.remoteName || '';
+    C.photoPath = photoAsset && photoAsset.path || '';
+    C.maskName = maskAsset && maskAsset.remoteName || '';
+    C.maskPath = maskAsset && maskAsset.path || '';
+    const scanSources = (pj.scanList || []).filter((s) => (pj.cur.scans || []).includes(s.id));
+    const scanPngs = scanSources.flatMap((s) => (s.files || []).filter((f) => /\.png$/i.test(f.name) && f.size <= 10 * 1024 * 1024).map((f) => ({ scan: s.id, name: f.name, size: f.size })));
+    const candidates = C.validation && C.validation.imageInputs || [];
+    const bindingSelect = (role, label) => `<div class="f"><label>${label} image input</label><select data-comfy-binding="${role}"><option value="">Choose an input from the installed workflow</option>${candidates.map((x) => { const value = `${x.nodeId}::${x.inputName}`, current = C.bindings[role] && `${C.bindings[role].nodeId}::${C.bindings[role].inputName}`; return `<option value="${esc(value)}" ${current === value ? 'selected' : ''}>Node ${esc(x.nodeId)} · ${esc(x.classType)} · ${esc(x.inputName)}${x.currentName ? ` (${esc(x.currentName)})` : ''}</option>`; }).join('')}</select></div>`;
+    const report = C.validation ? `${C.validation.missing.length ? `Missing node types: ${C.validation.missing.join(', ')}. ` : ''}${C.validation.issues.length ? C.validation.issues.slice(0, 4).join(' ') : `Schema checked: ${C.validation.nodeCount} nodes; ${candidates.length} image inputs found.`}` : '';
+    const outputs = (pj.generated || []).filter((x) => x.projectId === pj.cur.id);
+    el.innerHTML = `<div class="sect">ComfyUI workflow</div><p class="muted pj-p">When no custom workflow is imported, Lumen builds a standard inpainting workflow from the built-in nodes and installed checkpoint choices reported by your ComfyUI server. Import an API workflow below only if you want to override that automatic workflow.</p><div class="f"><label>ComfyUI server</label><input id="pjComfyUrl" type="url" value="${esc(C.url)}"></div><div class="f"><label>Automatic scan prompt (optional)</label><textarea id="pjComfyPrompt" rows="3" maxlength="2000" style="width:100%;resize:vertical" placeholder="Leave blank for Lumen’s projector-ready default prompt">${esc(C.prompt || '')}</textarea><small class="muted">Used by Lumen’s generated workflow. A custom imported workflow keeps its own prompt nodes.</small></div><div class="f"><label>Base photo and surface mask (PNG, 1280×720 or 1920×1080)</label><div class="row pj-wrap"><input id="pjComfyPhoto" type="file" accept="image/png"><button class="btn" id="pjComfyUploadPhoto">Upload base photo</button><input id="pjComfyMask" type="file" accept="image/png"><button class="btn" id="pjComfyUploadMask">Upload surface mask</button></div><small class="muted">Photo: ${esc(C.photoName || 'not uploaded')} · Mask: ${esc(C.maskName || 'not uploaded')}</small></div>${scanPngs.length ? `<div class="f"><label>Reuse a saved phone scan photo</label><div class="row pj-wrap"><select id="pjComfyScanImage">${scanPngs.map((x, i) => `<option value="${i}">${esc(x.name)} · ${esc(x.scan)}</option>`).join('')}</select><button class="btn" id="pjComfyUseScan">Use as base photo</button></div><small class="muted">Only PNG scan images within the 10 MB ComfyUI upload limit are listed.</small></div>` : ''}<div class="f"><label>Optional custom API workflow JSON</label><input id="pjComfyFile" type="file" accept=".json,application/json"><textarea id="pjComfyRaw" rows="8" maxlength="10485760" style="width:100%;resize:vertical;margin-top:6px" placeholder="Optional: choose a custom API workflow JSON">${esc(C.raw)}</textarea></div>${candidates.length ? `<div class="sect">Connect uploaded images to workflow inputs</div>${bindingSelect('photo', 'Base photo')}${bindingSelect('mask', 'Surface mask')}` : ''}<div class="row pj-wrap"><button class="btn" id="pjComfyValidate">Validate against ComfyUI</button><button class="btn pri" id="pjComfyQueue">Queue workflow</button>${C.promptId ? `<button class="btn" id="pjComfyHistory">Check result</button><button class="btn" id="pjComfySaveOutputs" ${C.historyEntry ? '' : 'disabled'}>Save generated media</button>` : ''}</div>${report ? `<p class="muted pj-p">${esc(report)}</p>` : ''}<p class="muted pj-p">${esc(C.status)}</p>${outputs.length ? `<div class="sect">Saved generated media</div>${outputs.map((x, i) => `<div class="row pj-wrap"><span>${esc(x.filename)} · ${x.mediaType} · ${(x.size / 1048576).toFixed(1)} MB</span><button class="btn" data-output="${i}">Show in folder</button><button class="btn" data-output="${i}" data-output-action="td">Prepare in TouchDesigner</button></div>`).join('')}` : ''}`;
+    const url = $('#pjComfyUrl', el), raw = $('#pjComfyRaw', el), file = $('#pjComfyFile', el);
+    url.onchange = () => { C.url = url.value; pjScheduleComfySave(); };
+    $('#pjComfyPrompt', el).oninput = () => { C.prompt = $('#pjComfyPrompt', el).value; pjScheduleComfySave(); };
+    raw.oninput = () => { C.raw = raw.value; C.autoWorkflow = false; C.validation = null; pjScheduleComfySave(); };
+    file.onchange = async () => { const f = file.files && file.files[0]; if (!f) return; if (f.size > 10 * 1024 * 1024) { C.status = 'Workflow exceeds the 10 MB limit.'; return pjPanel(); } C.raw = await f.text(); C.autoWorkflow = false; C.validation = null; pjScheduleComfySave(); pjPanel(); };
+    const uploadAsset = (inputId, role) => async () => {
+      C.url = url.value;
+      pjScheduleComfySave();
+      const f = $(`#${inputId}`, el).files && $(`#${inputId}`, el).files[0]; if (!f) { C.status = `Choose a ${role} PNG first.`; return pjPanel(); }
+      if (f.type !== 'image/png' || f.size > 10 * 1024 * 1024) { C.status = `${role} must be a PNG smaller than 10 MB.`; return pjPanel(); }
+      try {
+        const image = await createImageBitmap(f), allowed = (image.width === 1280 || image.width === 1920) && image.height * 16 === image.width * 9;
+        if (!allowed) throw new Error('Image must be exactly 1280×720 or 1920×1080.');
+        if (role === 'surface mask') {
+          const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 288;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true }); ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data; let binary = 0, white = 0, black = 0, samples = 0;
+          for (let i = 0; i < pixels.length; i += 16) { const v = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3; if (v <= 12) black++; else if (v >= 243) white++; else binary++; samples++; }
+          if (!white || !black || binary / samples > 0.05) throw new Error('Mask must contain both a white target and black background with at least 95% near-black/near-white pixels.');
+        }
+        image.close();
+        const dataUrl = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Could not read the selected PNG.')); reader.readAsDataURL(f); });
+        await pjEnsureSaved();
+        const assetRole = role === 'base photo' ? 'photo' : 'mask';
+        const result = await call('comfy:upload-png', C.url, f.name, dataUrl, assetRole, pj.cur.id);
+        pj.inputAssets = [...(pj.inputAssets || []).filter((x) => x.role !== assetRole), result.asset];
+        if (role === 'base photo') C.photoName = result.name; else C.maskName = result.name;
+        if (role === 'base photo') C.photoPath = result.localPath; else C.maskPath = result.localPath;
+        C.status = `${role} uploaded to ComfyUI as ${result.name}. Choose its image input below, then validate.`;
+      } catch (e) { C.status = e.message; }
+      pjPanel();
+    };
+    $('#pjComfyUploadPhoto', el).onclick = uploadAsset('pjComfyPhoto', 'base photo');
+    $('#pjComfyUploadMask', el).onclick = uploadAsset('pjComfyMask', 'surface mask');
+    const options = () => ({ bindings: C.bindings, assets: { photo: C.photoName || '', mask: C.maskName || '' } });
+    el.querySelectorAll('[data-comfy-binding]').forEach((select) => { select.onchange = () => { const role = select.dataset.comfyBinding, [nodeId, inputName] = String(select.value || '').split('::'); C.bindings[role] = nodeId && inputName ? { nodeId, inputName } : null; pjScheduleComfySave(); }; });
+    const scanButton = $('#pjComfyUseScan', el);
+    if (scanButton) scanButton.onclick = async () => {
+      try {
+        C.url = url.value;
+        pjScheduleComfySave();
+        const target = scanPngs[Number($('#pjComfyScanImage', el).value)]; if (!target) throw new Error('Choose a saved scan photo first.');
+        const fileData = await call('phone-scan:read', target.scan, target.name), dataUrl = `data:image/png;base64,${fileData.data}`;
+        const blob = await (await fetch(dataUrl)).blob(), image = await createImageBitmap(blob);
+        const valid = (image.width === 1280 && image.height === 720) || (image.width === 1920 && image.height === 1080); image.close();
+        if (!valid) throw new Error('Scan photo must be exactly 1280×720 or 1920×1080 to match the ComfyUI workflow.');
+        await pjEnsureSaved();
+        const result = await call('comfy:upload-png', C.url, target.name, dataUrl, 'photo', pj.cur.id); pj.inputAssets = [...(pj.inputAssets || []).filter((x) => x.role !== 'photo'), result.asset]; C.photoName = result.name; C.photoPath = result.localPath; C.status = `Saved scan photo uploaded as ${result.name}. Choose its workflow input, then validate.`;
+      } catch (e) { C.status = e.message; }
+      pjPanel();
+    };
+    $('#pjComfyValidate', el).onclick = async () => { C.url = url.value; C.raw = raw.value; pjScheduleComfySave(); try { C.validation = await call('comfy:check', C.url, C.raw, options()); C.status = C.validation.missing.length || C.validation.issues.length ? 'Review the workflow checks above before queueing.' : `Ready to queue. ${C.validation.nodeCount} nodes checked; ${C.validation.bound.length} uploaded image input(s) bound. Queue: ${C.validation.queue.running} running, ${C.validation.queue.pending} pending.`; } catch (e) { C.status = e.message; } pjPanel(); };
+    $('#pjComfyQueue', el).onclick = async () => { C.url = url.value; C.raw = raw.value; try { await pjEnsureSaved(); C.validation = await call('comfy:check', C.url, C.raw, options()); if (C.validation.missing.length || C.validation.issues.length) { C.status = 'Workflow validation found issues. Review them before queueing.'; pjPanel(); return; } const result = await call('comfy:queue', C.url, C.raw, options()); C.promptId = result.promptId; C.promptUrl = C.url; C.historyEntry = null; C.status = `Queued ${result.nodeCount} nodes. Prompt ID: ${result.promptId}`; await pjFlushComfyConfig(); } catch (e) { C.status = e.message; } pjPanel(); };
+    const historyButton = $('#pjComfyHistory', el);
+    if (historyButton) historyButton.onclick = async () => { try { const result = await call('comfy:history', C.promptUrl || C.url, C.promptId), status = result && result.status || {}, hasMedia = result && Object.values(result.outputs || {}).some((node) => node && ['images', 'gifs', 'videos'].some((key) => Array.isArray(node[key]) && node[key].length)); C.historyEntry = result && hasMedia && (status.completed === true || status.status_str === 'success') ? result : null; C.status = C.historyEntry ? `Execution complete. ${Object.keys(result.outputs || {}).length} output node(s). Save generated media to use it from this project.` : result ? `Execution status: ${JSON.stringify(status)}. No completed media is ready to save yet.` : 'Still queued or running.'; } catch (e) { C.status = e.message; } pjPanel(); };
+    const saveOutputs = $('#pjComfySaveOutputs', el);
+    if (saveOutputs) saveOutputs.onclick = async () => { try { const result = await call('comfy:save-outputs', C.promptUrl || C.url, C.promptId, pj.cur.id); pj.generated = result.outputs || []; C.status = result.status; } catch (e) { C.status = e.message; } pjPanel(); };
+    el.querySelectorAll('[data-output]').forEach((button) => { button.onclick = async () => { const output = outputs[Number(button.dataset.output)]; if (!output) return; try { if (button.dataset.outputAction === 'td') { window.dispatchEvent(new CustomEvent('lumen:td-projection', { detail: { mediaPath: output.path, photoPath: C.photoPath, maskPath: C.maskPath } })); } else await call('comfy:reveal-output', output.projectId, output.promptId, output.filename); } catch (e) { C.status = e.message; pjPanel(); } }; });
+    return;
+  }
   if (pj.tab === 'visuals') {
     const paletteNames = { aurora: 'Aurora', ember: 'Ember', tide: 'Tide', dusk: 'Dusk', mono: 'Monochrome' };
     el.innerHTML = `<div class="sect">Animation${r ? ' for “' + esc(r.name) + '”' : ''}</div><div class="f"><label>Shared palette</label><select data-palette>${PJ.PALETTE_IDS.map((id) => `<option value="${id}" ${pj.cur.palette === id ? 'selected' : ''}>${paletteNames[id] || id}</option>`).join('')}</select></div>
@@ -307,7 +592,13 @@ function pjWire() {
 
   root.addEventListener('click', async (e) => {
     const t = e.target, r = pjSel();
-    const tab = t.closest('[data-tab]'); if (tab) { pj.tab = tab.dataset.tab; pjTabs(); pjPanel(); pjSvg(); return; }
+    const tab = t.closest('[data-tab]'); if (tab) {
+      if (tab.dataset.tab === 'ai') {
+        try { await pjEnsureSaved(); if (pj.comfyProjectId !== pj.cur.id) await pjLoadComfyConfig(pj.cur); }
+        catch (error) { if (pj.comfy) pj.comfy.status = `Could not open workflow settings: ${error.message}`; }
+      }
+      pj.tab = tab.dataset.tab; pjTabs(); pjPanel(); pjSvg(); return;
+    }
     const md = t.closest('[data-mode]'); if (md) return pjSetMode(md.dataset.mode);
     const pers = t.closest('[data-pers]'); if (pers) { pj.cur.auto.personality = pers.dataset.pers; pjDirector(); return pjChanged(true); }
     const al = t.closest('[data-pjalign]'); if (al) return pjCalibAnswer(+al.dataset.pjalign);
@@ -339,10 +630,15 @@ function pjWire() {
       if (act === 'project' && d && d.primary && !await confirmBox('Project on this screen?', 'The projection will cover this screen, including Lumen. Press Esc to close it.', 'Project')) return;
       pj.out = await call('proj:open', { displayId: pj.display, windowed: act === 'window' }); pjPush(); setTimeout(pjPush, 600); pjBar(); return pjStatus(); }
     if (act === 'close') { pj.out = await call('proj:close'); pjBar(); return pjStatus(); }
-    if (act === 'new') { const n = await ask('New room layout', 'New room'); if (n) { pjOpen(PJ.project({ name: n })); pjSave(); } return; }
+    if (act === 'new') { const n = await ask('New room layout', 'New room'); if (n) { if (await pjOpen(PJ.project({ name: n }))) pjSave(); } return; }
     if (act === 'rename') { const n = await ask('Rename layout', pj.cur.name); if (n) { pj.cur.name = n; pjBar(); pjSave(); } return; }
-    if (act === 'delete') { if (!await confirmBox('Delete layout', `Delete “${pj.cur.name}” and all its shapes?`, 'Delete')) return; await pjSaveQueue.flush(); await call('proj:delete', pj.cur.id); pj.list = pj.list.filter((p) => p !== pj.cur); return pjOpen(pj.list[0] || PJ.project({ name: 'My room' })); }
-    if (act === 'starter') { const b = a.getBoundingClientRect(); return popup(PJ.STARTERS.map((s) => ({ label: s.name, run: () => { pjOpen(PJ.project({ name: s.name, regions: s.regions.map((x) => ({ ...x, id: PJ.uid() })) })); pjSave(); } })), b.left, b.bottom, a); }
+    if (act === 'delete') {
+      if (!await confirmBox('Delete layout', `Delete “${pj.cur.name}” and all its shapes?`, 'Delete')) return;
+      try { await pjFlushComfyConfig(); await pjSaveQueue.flush(); await call('proj:delete', pj.cur.id); }
+      catch (error) { if (pj.comfy) pj.comfy.status = `Could not save project settings before deletion: ${error.message}`; pjPanel(); return; }
+      pj.list = pj.list.filter((p) => p !== pj.cur); return pjOpen(pj.list[0] || PJ.project({ name: 'My room' }), { savePrevious: false });
+    }
+    if (act === 'starter') { const b = a.getBoundingClientRect(); return popup(PJ.STARTERS.map((s) => ({ label: s.name, run: async () => { if (await pjOpen(PJ.project({ name: s.name, regions: s.regions.map((x) => ({ ...x, id: PJ.uid() })) }))) pjSave(); } })), b.left, b.bottom, a); }
     if (act === 'undo') return pjUndo();
     if (act === 'randall') { pjSnap(); pj.cur.regions.forEach(rnd); return pjChanged(true); }
     if (act === 'photo') return $('#pjFile').click();
@@ -370,9 +666,9 @@ function pjWire() {
     pjChanged(el.tagName === 'SELECT');
   };
   root.addEventListener('input', (e) => { if (e.target.matches('input[type=range][data-evo]')) return pjEvoSet(e.target); if (e.target.matches('input[type=range][data-k]')) set(e.target); else if (e.target.matches('input[type=range][data-auto]')) { const k = e.target.dataset.auto; pj.cur.auto[k] = +e.target.value; const lab = $('#pjav-' + k) || $('#pjev-' + k); if (lab) lab.textContent = pjPct(+e.target.value, k); pjDirector(); pjSave(); } });
-  root.addEventListener('change', (e) => {
+  root.addEventListener('change', async (e) => {
     const t = e.target, L = pj.cur.lights, r = pjSel();
-    if (t.id === 'pjLayout') { const p = pj.list.find((x) => x.id === t.value); if (p) pjOpen(p); return; }
+    if (t.id === 'pjLayout') { const p = pj.list.find((x) => x.id === t.value); if (p) await pjOpen(p); return; }
     if (t.matches('select[data-quality]')) { pj.cur.quality = PQ.normalize(t.value); pj.qkey = ''; return pjChanged(true); }
     if (t.matches('input[data-quality-auto]')) { pj.cur.autoQuality = t.checked; pj.qkey = ''; return pjChanged(true); }
     if (t.dataset.palette) { pj.cur.palette = PJ.paletteId(t.value); pjChanged(true); return; }

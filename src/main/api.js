@@ -2,12 +2,16 @@
 // Every request the page can make, as plain functions. main.js exposes them over IPC; the tests call them directly.
 // `platform` is the small set of things only Electron can do (windows, dialogs, clipboard, start with Windows).
 const net = require('net');
+const fs = require('fs');
+const path = require('path');
+const { randomUUID } = require('crypto');
 const { normalize: normalizeFx } = require('./fx');
 const Proj = require('../shared/proj-core');
 const Core = require('../shared/show-core');
 const { ProjLights } = require('./projlights');
 const { createShowApi } = require('./showapi');
 const { createTechnologyOptimization } = require('./technology-optimization');
+const Comfy = require('./comfyui');
 
 function createApi({ manager, store, fx, automation, diag, platform }) {
   const { wiz, hubspace, cync } = manager.providers;
@@ -18,6 +22,46 @@ function createApi({ manager, store, fx, automation, diag, platform }) {
     latencyOf: (id) => { const d = manager.devices.get(id); return d ? Core.latencyOf({ brand: d.brand }, latProf(id)) : 0; },
     intervalOf: (id) => { const d = manager.devices.get(id); return d ? Core.intervalOf({ brand: d.brand }, latProf(id)) : 500; } });
   const projects = () => (Array.isArray(store.data.projections) ? store.data.projections : (store.data.projections = []));
+  const comfyConfigPath = (projectId) => {
+    projectId = String(projectId || '');
+    if (!/^[\w-]{1,40}$/.test(projectId)) throw new Error('Invalid Projection Studio project ID.');
+    const base = platform.userDataDir || store.dir;
+    if (!base) throw new Error('Projection workflow storage is unavailable.');
+    return path.join(base, 'projection-workflows', `${projectId}.json`);
+  };
+  const normalizeComfyConfig = (value = {}) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) value = {};
+    const raw = String(value.raw || '');
+    if (Buffer.byteLength(raw, 'utf8') > Comfy.MAX_WORKFLOW_BYTES) throw new Error('Workflow JSON must be smaller than 10 MB.');
+    const prompt = String(value.prompt || '').trim();
+    if (prompt.length > 2000) throw new Error('The scan generation prompt must be no more than 2,000 characters.');
+    const bindings = {};
+    for (const role of ['photo', 'mask']) {
+      const target = value.bindings && value.bindings[role];
+      if (!target) continue;
+      const nodeId = String(target.nodeId || ''), inputName = String(target.inputName || '');
+      if (!/^\d{1,20}$/.test(nodeId) || !inputName || inputName.length > 120 || /[\x00-\x1f]/.test(inputName)) throw new Error(`The saved ${role} input binding is invalid.`);
+      bindings[role] = { nodeId, inputName };
+    }
+    const url = Comfy.safeComfyUrl(value.url);
+    const promptId = String(value.promptId || '');
+    if (promptId && !/^[a-f0-9-]{16,64}$/i.test(promptId)) throw new Error('Invalid saved ComfyUI prompt ID.');
+    const promptUrl = promptId ? Comfy.safeComfyUrl(value.promptUrl || url) : '';
+    return { url, raw, bindings, prompt, autoWorkflow: !!value.autoWorkflow, promptId, promptUrl };
+  };
+  const readComfyConfig = async (projectId) => {
+    const file = comfyConfigPath(projectId);
+    if (!projects().some((p) => p && p.id === projectId)) return normalizeComfyConfig();
+    try {
+      const stat = await fs.promises.stat(file);
+      if (stat.size > Comfy.MAX_WORKFLOW_BYTES + 65536) throw new Error('Saved Projection Studio workflow settings exceed the 10 MB limit.');
+      return normalizeComfyConfig(JSON.parse(await fs.promises.readFile(file, 'utf8')));
+    } catch (error) {
+      if (error.code === 'ENOENT') return normalizeComfyConfig();
+      if (error instanceof SyntaxError) throw new Error('Saved Projection Studio workflow settings are unreadable.');
+      throw error;
+    }
+  };
   manager.extra = () => ({ sleep: automation.sleep, fx: { active: fx.active, mode: fx.mode } });
   const forgetBrand = (brand) => { for (const [id, d] of [...manager.devices]) if (d.brand === brand) manager.forgetDevice(id); manager._emit(); };
   const saveFx = (o) => { const cfg = normalizeFx(o); settings().fx = cfg; store.save(); return cfg; };
@@ -40,8 +84,77 @@ function createApi({ manager, store, fx, automation, diag, platform }) {
   return {
     ...showApi,
     ...technologyOptimization,
+    'comfy:validate': (raw) => Comfy.parseWorkflow(raw),
+    'comfy:inspect': (url) => Comfy.inspect(url),
+    'comfy:check': (url, raw, options) => Comfy.validateAgainstServer(url, raw, options),
+    'comfy:scan-workflow': (url, photoName, maskName, prompt) => Comfy.createScanWorkflow(url, photoName, maskName, prompt),
+    'comfy:project-config:get': (projectId) => readComfyConfig(String(projectId || '')),
+    'comfy:project-config:save': async (projectId, value) => {
+      projectId = String(projectId || '');
+      const file = comfyConfigPath(projectId);
+      if (!projects().some((p) => p && p.id === projectId)) throw new Error('Save this Projection Studio project before storing workflow settings.');
+      const config = normalizeComfyConfig(value);
+      const dir = path.dirname(file), temporary = `${file}.${randomUUID()}.tmp`;
+      await fs.promises.mkdir(dir, { recursive: true });
+      try {
+        await fs.promises.writeFile(temporary, JSON.stringify(config), { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+        await fs.promises.rename(temporary, file);
+      } catch (error) {
+        await fs.promises.unlink(temporary).catch(() => {});
+        throw error;
+      }
+      return config;
+    },
+    'comfy:upload-png': async (url, filename, dataUrl, role = 'photo', projectId) => {
+      role = String(role || 'photo'); projectId = String(projectId || '');
+      if (!['photo', 'mask'].includes(role)) throw new Error('Choose a base photo or surface mask asset.');
+      if (!/^[\w-]{1,40}$/.test(projectId)) throw new Error('Save this Projection Studio project before uploading image assets.');
+      filename = String(filename || '');
+      if (filename !== path.basename(filename) || !/^[\w.-]{1,100}\.png$/i.test(filename)) throw new Error('Choose a PNG file with a simple filename.');
+      const bytes = Comfy.decodePngDataUrl(dataUrl), uploaded = await Comfy.uploadPng(url, filename, dataUrl);
+      const base = platform.userDataDir || store.dir;
+      if (!base) throw new Error('Projection image storage is unavailable.');
+      const dir = path.join(base, 'projection-inputs', projectId); await fs.promises.mkdir(dir, { recursive: true });
+      const localName = `${role}-${filename}`, file = path.join(dir, localName);
+      await fs.promises.writeFile(file, bytes);
+      store.data.projectionAssets = Array.isArray(store.data.projectionAssets) ? store.data.projectionAssets : [];
+      const record = { projectId, role, filename: localName, remoteName: uploaded.name, path: file, size: bytes.length, uploadedAt: new Date().toISOString() };
+      const i = store.data.projectionAssets.findIndex((x) => x.projectId === projectId && x.role === role);
+      if (i < 0) store.data.projectionAssets.push(record); else store.data.projectionAssets[i] = record;
+      store.save(); return { ...uploaded, localPath: file, role, asset: record };
+    },
+    'comfy:queue': (url, raw, options) => Comfy.queueWorkflow(url, raw, options),
+    'comfy:history': (url, promptId) => Comfy.history(url, promptId),
+    'comfy:save-outputs': async (url, promptId, projectId) => {
+      const base = platform.userDataDir || store.dir;
+      if (!base) throw new Error('Generated media storage is unavailable.');
+      const result = await Comfy.saveOutputs(url, promptId, base, projectId);
+      store.data.projectionGenerated = Array.isArray(store.data.projectionGenerated) ? store.data.projectionGenerated : [];
+      for (const item of result.saved) {
+        const i = store.data.projectionGenerated.findIndex((x) => x.path === item.path);
+        if (i < 0) store.data.projectionGenerated.push(item); else store.data.projectionGenerated[i] = item;
+      }
+      store.data.projectionGenerated = store.data.projectionGenerated.slice(-500);
+      if (result.saved.length) store.save();
+      return { ...result, outputs: (store.data.projectionGenerated || []).filter((x) => x.projectId === projectId) };
+    },
+    'comfy:generated': (projectId) => (Array.isArray(store.data.projectionGenerated) ? store.data.projectionGenerated : []).filter((x) => x.projectId === projectId),
+    'comfy:input-assets': (projectId) => (Array.isArray(store.data.projectionAssets) ? store.data.projectionAssets : []).filter((x) => x.projectId === projectId),
+    'comfy:reveal-output': (projectId, promptId, filename) => {
+      const record = (Array.isArray(store.data.projectionGenerated) ? store.data.projectionGenerated : []).find((x) => x.projectId === projectId && x.promptId === promptId && x.filename === filename);
+      if (!record || !pathWithin(record.path, platform.userDataDir || store.dir)) throw new Error('Generated file is no longer available.');
+      if (!platform.revealFile) throw new Error('Opening the generated output folder is unavailable here.');
+      return platform.revealFile(record.path);
+    },
+    'phone-scan:start': (projectId) => platform.phoneScan.start(projectId),
+    'phone-scan:stop': () => platform.phoneScan.stop(),
+    'phone-scan:status': () => platform.phoneScan.snapshot(),
+    'phone-scan:list': () => (Array.isArray(store.data.projectionScans) ? store.data.projectionScans : []).map(({ id, projectId, createdAt, files }) => ({ id, projectId, createdAt, files: Array.isArray(files) ? files : [] })),
+    'phone-scan:read': (scanId, filename) => platform.phoneScan.read(scanId, filename),
+    'phone-scan:dependencies': (scanId, filename) => platform.phoneScan.dependencies(scanId, filename),
     'td:status': () => platform.touchDesigner.snapshot(),
     'td:config': (patch) => platform.touchDesigner.saveConfig(patch),
+    'td:verify-comfy-json': (rawJson) => platform.touchDesigner.verifyComfyWorkflowJson(rawJson),
     'td:connect': () => platform.touchDesigner.connect(),
     'td:disconnect': () => platform.touchDesigner.disconnect(),
     'td:models': () => platform.touchDesigner.models(),
@@ -146,6 +259,12 @@ function createApi({ manager, store, fx, automation, diag, platform }) {
     'win:max': () => platform.win('maximize'),
     'win:close': () => platform.win('close'),
   };
+}
+
+function pathWithin(file, root) {
+  if (typeof file !== 'string' || typeof root !== 'string') return false;
+  const rel = path.relative(path.resolve(root), path.resolve(file));
+  return !!rel && !rel.startsWith(`..${path.sep}`) && rel !== '..' && !path.isAbsolute(rel);
 }
 // Frames arrive many times a second on a one-way channel, so they are validated here rather than trusted.
 const FEAT_KEYS = ['sub', 'lowMid', 'highMid', 'rms', 'centroid', 'flux', 'impulse', 'energy', 'trend', 'build', 'dyn', 'beatPhase', 'barPos', 'bpm'];

@@ -23,6 +23,31 @@ const ANIMATION_SYSTEM_PROMPT = [
   'When finished, summarize what was created, give its network path and playback/output details, and state plainly whether you saw a preview and whether any asset is only a placeholder. Never claim a render or export succeeded unless tool output confirms it.'
 ].join(' ');
 
+const COMFY_TD_WORKFLOW = [
+  { step: 1, id: 'export-api', phase: 'Prerequisite', title: 'Export an API workflow', instructions: 'In ComfyUI, enable Dev Mode Options and choose Workflow → Export (API). Save the JSON in a project folder.', verification: 'The file contains API nodes with class_type and inputs, without UI layout coordinates.' },
+  { step: 2, id: 'init-comfytd', phase: 'Setup', title: 'Install ComfyTD in TouchDesigner', instructions: 'Install the ComfyTD .tox component from its trusted source. Set its Base Folder to your ComfyUI installation and launch ComfyUI from the component.', verification: null },
+  { step: 3, id: 'map-drive-params', phase: 'Data Routing', title: 'Map and drive parameters', instructions: 'Load the exported API JSON in ComfyTD and generate its parameters. Connect CHOP channels to supported parameters such as seed or denoise.', verification: 'Confirm the selected ComfyTD version exposes the parameters and updates them as expected.' },
+  { step: 4, id: 'receive-warp-output', phase: 'Visuals', title: 'Receive and map the output', instructions: 'Connect ComfyTD output to a TOP and then to your chosen projection-mapping component, such as Stoner or Kantan Mapper, if installed.', verification: null }
+];
+
+function verifyComfyWorkflowJson(rawJson) {
+  let parsed;
+  try { parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson; }
+  catch { return { valid: false, error: 'Invalid JSON file.' }; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { valid: false, error: 'JSON root must be an object containing ComfyUI API nodes.' };
+  if (Array.isArray(parsed.nodes) || Array.isArray(parsed.links) || (parsed.extra && typeof parsed.extra === 'object')) {
+    return { valid: false, error: 'This looks like a ComfyUI editor workflow. Export as API format using Workflow → Export (API).' };
+  }
+  const entries = Object.entries(parsed).filter(([, node]) => node && typeof node === 'object' && typeof node.class_type === 'string' && node.inputs && typeof node.inputs === 'object');
+  if (!entries.length) return { valid: false, error: 'No ComfyUI API nodes (class_type + inputs) found.' };
+  const exposed = [];
+  for (const [id, node] of entries) {
+    const parameters = Object.keys(node.inputs).filter((key) => ['text', 'seed', 'noise_seed', 'cfg', 'denoise', 'steps', 'ckpt_name'].includes(key));
+    if (parameters.length) exposed.push({ id, classType: node.class_type, parameters });
+  }
+  return { valid: true, nodeCount: entries.length, exposed };
+}
+
 function isRoutineSceneEdit(tool) {
   const name = String(tool && tool.name || '');
   const annotations = tool && tool.annotations || {};
@@ -83,8 +108,12 @@ class TouchDesigner extends EventEmitter {
     this.client = null; this.transport = null; this.tools = []; this.state = 'disconnected'; this.error = null;
     this.callbackServer = null; this.callback = null; this.cancelled = false; this.activeRun = null; this.pendingTool = null; this.turns = []; this.chatHistory = []; this.projectInfo = null;
   }
-  config() { const c = this.store.data.settings.touchDesigner || {}; return { url: c.url || DEFAULT_TD_URL, ollamaModel: c.ollamaModel || '' }; }
-  snapshot() { const p = this.pendingTool; return { state: this.state, error: this.error, url: this.config().url, ollamaModel: this.config().ollamaModel, projectInfo: this.projectInfo, tools: this.tools.map(({ name, description, inputSchema, annotations }) => ({ name, description, inputSchema, annotations, readOnly: !!(annotations && annotations.readOnlyHint) || READ_ONLY.has(name), destructive: DESTRUCTIVE.has(name) })), runId: this.activeRun, pendingTool: p ? { id: p.id, runId: p.runId, name: p.name, description: p.description, args: p.args, destructive: p.destructive, allowRoutine: p.allowRoutine } : null, turns: this.turns.slice(-60) }; }
+  config() { const c = this.store.data.settings.touchDesigner || {}; return { url: c.url || DEFAULT_TD_URL, ollamaModel: c.ollamaModel || '', comfySteps: c.comfySteps && typeof c.comfySteps === 'object' ? c.comfySteps : {} }; }
+  verifyComfyWorkflowJson(rawJson) {
+    if (typeof rawJson !== 'string' || rawJson.length > 10 * 1024 * 1024) return { valid: false, error: 'Choose a JSON file smaller than 10 MB.' };
+    return verifyComfyWorkflowJson(rawJson);
+  }
+  snapshot() { const p = this.pendingTool; const cfg = this.config(); return { state: this.state, error: this.error, url: cfg.url, ollamaModel: cfg.ollamaModel, comfySteps: cfg.comfySteps, comfyWorkflow: COMFY_TD_WORKFLOW, projectInfo: this.projectInfo, tools: this.tools.map(({ name, description, inputSchema, annotations }) => ({ name, description, inputSchema, annotations, readOnly: !!(annotations && annotations.readOnlyHint) || READ_ONLY.has(name), destructive: DESTRUCTIVE.has(name) })), runId: this.activeRun, pendingTool: p ? { id: p.id, runId: p.runId, name: p.name, description: p.description, args: p.args, destructive: p.destructive, allowRoutine: p.allowRoutine } : null, turns: this.turns.slice(-60) }; }
   publish() { this.emit('status', this.snapshot()); }
   log(type, text, extra = {}) {
     this.turns.push({ time: new Date().toISOString(), type, text: String(text).slice(0, 3000), ...extra }); this.turns = this.turns.slice(-100);
@@ -95,6 +124,11 @@ class TouchDesigner extends EventEmitter {
     const c = this.config();
     if (patch && patch.url !== undefined) c.url = safeEndpoint(patch.url).toString();
     if (patch && patch.ollamaModel !== undefined) c.ollamaModel = String(patch.ollamaModel).trim().slice(0, 120);
+    if (patch && patch.comfySteps && typeof patch.comfySteps === 'object') {
+      const next = { ...c.comfySteps };
+      for (const step of COMFY_TD_WORKFLOW) if (patch.comfySteps[step.id] !== undefined) next[step.id] = !!patch.comfySteps[step.id];
+      c.comfySteps = next;
+    }
     this.store.data.settings.touchDesigner = c; this.store.save(); this.publish(); return c;
   }
   async startCallbackServer() {
@@ -288,4 +322,4 @@ class TouchDesigner extends EventEmitter {
   }
 }
 
-module.exports = { TouchDesigner, DEFAULT_TD_URL, DEFAULT_OLLAMA_URL, safeEndpoint, READ_ONLY, DESTRUCTIVE, toolName, toToolOutput, isRoutineSceneEdit, parseToolArguments, hasFileOrCodeArgument };
+module.exports = { TouchDesigner, DEFAULT_TD_URL, DEFAULT_OLLAMA_URL, safeEndpoint, READ_ONLY, DESTRUCTIVE, toolName, toToolOutput, isRoutineSceneEdit, parseToolArguments, hasFileOrCodeArgument, COMFY_TD_WORKFLOW, verifyComfyWorkflowJson };
