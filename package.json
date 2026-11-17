@@ -1,13 +1,13 @@
 {
   "name": "lumen-lights",
   "productName": "Lumen",
-  "version": "1.8.2",
+  "version": "1.8.19",
   "description": "One dark-mode control center for WiZ, GE Cync and Hubspace smart lights",
   "main": "src/main/main.js",
   "author": "Lumen",
   "scripts": {
     "start": "electron .",
-    "test": "node test/projection.js && node test/touchdesigner.js && node test/wiz-caps.js && node test/wiz-errors.js && node test/wiz-multi.js",
+    "test": "node test/projection.js && node test/touchdesigner.js && node test/phone-scan.js && node test/wiz-caps.js && node test/wiz-errors.js && node test/wiz-multi.js",
     "dist": "electron-builder --win --x64",
     "dist:mac": "electron-builder --mac --x64 --arm64"
   },
@@ -70,6 +70,7 @@
   "versionBuildOffset": 5,
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "three": "0.187.0",
     "zod": "^4.6.7"
   }
 }

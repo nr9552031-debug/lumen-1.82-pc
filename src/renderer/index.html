@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' data:; img-src 'self' data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' data: 'sha256-p2wJOWN8rB9YvERkPNjvIDxkJTxs+fOHzf3zG8iFAQc='; img-src 'self' data:">
 <title>Lumen</title>
 <link rel="stylesheet" href="styles.css">
+<script type="importmap">{"imports":{"three":"../../node_modules/three/build/three.module.js","three/addons/":"../../node_modules/three/examples/jsm/"}}</script>
+<script type="module" src="scan-preview.js"></script>
 </head>
 <body data-family="aero" data-theme="aero">
 <!-- Icon set: drawn for Lumen in a glossy 2000s desktop style. -->

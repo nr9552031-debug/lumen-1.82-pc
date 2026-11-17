@@ -245,7 +245,8 @@
       // 1.8 continuous evolution: on/off, speed, complexity, music influence, autonomous variation, visual intensity, transition style
       evolve: { ...(EVO ? EVO.normSettings(o.evolve) : {}), xf: XF.includes((o.evolve || {}).xf) ? o.evolve.xf : 'auto' },
       quality: Q ? Q.normalize(o.quality) : (['low', 'medium', 'high'].includes(o.quality) ? o.quality : 'medium'), autoQuality: o.autoQuality !== false,
-      grid: !!o.grid, outlines: !!o.outlines, blackout: !!o.blackout, photo: typeof o.photo === 'string' && o.photo.startsWith('data:image/') && o.photo.length < 600000 ? o.photo : '', photoOpacity: num(o.photoOpacity, 0, 1, 0.5) };
+      grid: !!o.grid, outlines: !!o.outlines, blackout: !!o.blackout, photo: typeof o.photo === 'string' && o.photo.startsWith('data:image/') && o.photo.length < 600000 ? o.photo : '', photoOpacity: num(o.photoOpacity, 0, 1, 0.5),
+      scans: [...new Set((Array.isArray(o.scans) ? o.scans : []).filter((x) => typeof x === 'string' && /^[\w-]{1,80}$/.test(x)).slice(0, 50))] };
   }
   const R = (name, preset, pts, extra) => region({ name, preset, pts, ...extra });
   const STARTERS = [

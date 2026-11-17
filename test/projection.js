@@ -256,7 +256,7 @@ async function main() {
   const manager = { providers: { wiz: {}, hubspace: {}, cync: {} }, devices: new Map(), _meta: () => ({}), _normalize: (_d, p) => p, _emit: () => {} };
   const fx = { active: false, stop: async () => {} };
   const api = createApi({ manager, store, fx, automation: {}, diag: { redact: String, dump: () => '', log: () => {} }, platform: { version: 'test' } });
-  const input = PJ.project({ name: 'Studio persistence', evolve: { xf: 'ripple' }, quality: 'high', autoQuality: false, regions: [
+  const input = PJ.project({ name: 'Studio persistence', evolve: { xf: 'ripple' }, quality: 'high', autoQuality: false, scans: ['scan-abc', '../bad'], regions: [
     { id: 'wall-1', name: 'North wall', preset: 'hex', pts: PJ.shape('polygon'), speed: 1.7, hue: 92, bright: 0.7, opacity: 0.8, blend: 'screen', lights: ['bulb-1'] },
     { id: 'frame-1', name: 'Picture frame', preset: 'frame-drips', pts: PJ.shape('rect', 0.5, 0.3, 0.25, 0.3) },
   ] });
@@ -271,6 +271,7 @@ async function main() {
   assert.strictEqual(loaded.evolve.xf, 'ripple', 'the new transition setting keeps its value through save and load');
   assert.strictEqual(loaded.quality, 'high', 'quality selection is saved with the project');
   assert.strictEqual(loaded.autoQuality, false, 'automatic fallback preference is saved with the project');
+  assert.deepStrictEqual(loaded.scans, ['scan-abc'], 'associated phone scans persist with the projection project and reject malformed IDs');
   assert(saves > 0, 'project save reaches the store');
 
   // A device that repeatedly rejects projection updates is dropped from live driving, but its

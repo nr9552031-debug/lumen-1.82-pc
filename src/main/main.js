@@ -12,12 +12,13 @@ const { FxEngine } = require('./fx');
 const { Automation } = require('./automation');
 const { createApi, cleanFrame } = require('./api');
 const { TouchDesigner } = require('./touchdesigner');
+const { PhoneScanReceiver } = require('./phone-scan');
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
 const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
 const startHidden = process.argv.includes('--hidden');
-let win, manager, store, fx, automation, touchDesigner, tray = null, quitting = false;
+let win, manager, store, fx, automation, touchDesigner, phoneScan, tray = null, quitting = false;
 
 function stopDrivers() {
   const pl = manager && manager.projLights, sp = manager && manager.showPlayer;
@@ -90,6 +91,7 @@ async function quit() {
   quitting = true;
   const busy = stopDrivers();
   if (busy.length) await Promise.allSettled(busy);
+  if (phoneScan) phoneScan.stop();
   if (touchDesigner) await touchDesigner.disconnect().catch(() => {});
   app.quit();
 }
@@ -135,11 +137,14 @@ const displays = () => { const prim = screen.getPrimaryDisplay().id; return scre
 const platform = {
   displays, projOpen, projClose, projState,
   projectDir: app.getAppPath(),
+  userDataDir: null,
   version: app.getVersion(),
   runtime: `Electron ${process.versions.electron} | ${process.platform} ${process.arch}`,
   portable: !!process.env.PORTABLE_EXECUTABLE_DIR,
+  phoneScan: null,
   copy: (text) => clipboard.writeText(text),
   openExternal: (u) => shell.openExternal(u),
+  revealFile: (file) => { shell.showItemInFolder(file); return true; },
   applyStartup,
   win: (what) => { if (!win || win.isDestroyed()) return; if (what === 'minimize') win.minimize(); else if (what === 'maximize') (win.isMaximized() ? win.unmaximize() : win.maximize()); else if (what === 'close') win.close(); },
   saveFile: async (name, text) => {
@@ -181,6 +186,17 @@ function wire() {
 
 app.whenReady().then(() => {
   store = createStore();
+  platform.userDataDir = app.getPath('userData');
+  phoneScan = new PhoneScanReceiver({ directory: path.join(app.getPath('userData'), 'projection-scans'), onScan: (scan) => {
+    store.data.projectionScans = Array.isArray(store.data.projectionScans) ? store.data.projectionScans : [];
+    const entry = { ...scan, directory: path.join(app.getPath('userData'), 'projection-scans', scan.id) };
+    const i = store.data.projectionScans.findIndex((x) => x.id === scan.id); if (i < 0) store.data.projectionScans.push(entry); else store.data.projectionScans[i] = entry;
+    const project = (store.data.projections || []).find((x) => x.id === scan.projectId);
+    if (project) { project.scans = [...new Set([...(Array.isArray(project.scans) ? project.scans : []), scan.id])].slice(-50); }
+    store.save();
+  } });
+  platform.phoneScan = phoneScan;
+  phoneScan.on('status', (s) => send('phone-scan:status', s));
   touchDesigner = new TouchDesigner({ store, openExternal: (url) => shell.openExternal(url), version: app.getVersion() });
   platform.touchDesigner = touchDesigner;
   touchDesigner.on('status', (s) => send('tdmcp:status', s));
@@ -212,6 +228,7 @@ app.whenReady().then(() => {
 });
 app.on('second-instance', showWindow);
 app.on('before-quit', (e) => {
+  if (phoneScan) phoneScan.stop();
   try { store.saveNow(); } catch {}
   if (quitting) return; // the tray/window paths already waited for active lighting to restore
   // Native quit shortcuts (notably Cmd+Q on macOS) bypass the renderer's window-close path.

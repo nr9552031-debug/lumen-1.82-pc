@@ -2,6 +2,8 @@
 
 ## TouchDesigner Studio
 
+- [Three.js](https://github.com/mrdoob/three.js) — MIT, installed as `three` 0.187.0. Uses the maintained core plus official GLTFLoader, OBJLoader and PLYLoader add-ons for scan previews; no copied loader code.
+
 - [Model Context Protocol TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk/tree/v1.x) — MIT, installed as `@modelcontextprotocol/sdk` 1.32.2 with `zod` 4.6.7. Used in the Electron main process for standards-based MCP Streamable HTTP, tool discovery/calls, and OAuth 2.1/PKCE support. No source modifications.
 - [TouchDesigner TDMCP](https://github.com/TouchDesigner/TDMCP) — external user-installed MCP server/component; its official [Shared Use License](https://github.com/TouchDesigner/TDMCP/blob/main/LICENSE.md) permits use for projects but says TDMCP itself may not be redistributed as a product. Lumen does not bundle or copy its code.
 - [Ollama](https://github.com/ollama/ollama) — local user-installed model runtime accessed through the documented HTTP API; no Ollama dependency or code copied.

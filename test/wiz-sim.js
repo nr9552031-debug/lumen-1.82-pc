@@ -23,20 +23,21 @@ class SimBulb {
         if (m.method === 'getSystemConfig') return reply({ method: 'getSystemConfig', env: 'pro', result: { mac: this.mac, moduleName: this.module, fwVersion: '1.25.0' } });
         if (m.method === 'setPilot') { this.log.push({ t: Date.now(), params: m.params }); Object.assign(this.pilot, m.params); return reply({ method: 'setPilot', env: 'pro', result: { success: true } }); }
       });
-      this.sock.bind(this.port, this.ip, () => res(this));
+      this.sock.bind(this.port, this.ip, () => { this.port = this.sock.address().port; res(this); });
     });
   }
   stop() { return new Promise((r) => { try { this.sock.close(r); } catch { r(); } }); }
   setOnline(v) { this.online = v; }
 }
 
-// n bulbs at 127.0.0.(10+i); MACs are distinct. Returns { bulbs, ips, stop() }
+// Bind all simulated bulbs to the portable loopback address and give each its own ephemeral UDP port.
+// Real WiZ devices use the fixed protocol port; this port override keeps tests independent of 127/8 aliases.
 async function makeBulbs(n, port, opts = {}) {
   const bulbs = [];
   for (let i = 0; i < n; i++) {
-    const ip = `127.0.0.${10 + i}`, mac = ((0xa8bb50000000 + 0x1000 + i * 0x111).toString(16)).padStart(12, '0');
-    bulbs.push(await new SimBulb({ ip, mac, port, ...(opts.each ? opts.each(i) : {}) }).start());
+    const ip = '127.0.0.1', mac = ((0xa8bb50000000 + 0x1000 + i * 0x111).toString(16)).padStart(12, '0');
+    bulbs.push(await new SimBulb({ ip, mac, port: port === 0 ? 0 : port + i, ...(opts.each ? opts.each(i) : {}) }).start());
   }
-  return { bulbs, ips: bulbs.map((b) => b.ip), stop: () => Promise.all(bulbs.map((b) => b.stop())) };
+  return { bulbs, ips: [...new Set(bulbs.map((b) => b.ip))], endpoints: bulbs.map((b) => ({ ip: b.ip, port: b.port })), stop: () => Promise.all(bulbs.map((b) => b.stop())) };
 }
 module.exports = { SimBulb, makeBulbs };
