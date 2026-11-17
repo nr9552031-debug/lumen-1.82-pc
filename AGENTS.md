@@ -1,86 +1,68 @@
-# LUMEN / GLOWDESK - ENGINEERING RULES (Claude, Codex, any coding agent)
+# Lumen / GlowDesk — Agent Execution Rules
 
-## Permanent open-source-first development policy
-- Before implementing a new feature or substantial capability, research suitable established open-source projects, maintenance, compatibility, security, license, dependencies, performance and storage impact. Record the decision and attribution where relevant.
-- Preserve the established codebase as the baseline. Do not refactor, replace dependencies, optimize, remove code, or modernize existing functionality unless the owner explicitly authorizes that specific change.
-- New native capabilities may be integrated through the smallest necessary edits to existing files. Technology Optimization may inspect and report opportunities, but recommendations affecting existing functionality require explicit owner approval before implementation.
-- Research and recommendations may run automatically when configured. Code changes, package installation, destructive operations, and production releases require an approved development workflow; destructive operations and releases require explicit owner approval.
-- Do not install untrusted code or silently modify project files. Keep monitoring opt-in and rate-limited.
-- TouchDesigner Studio uses the official TDMCP tools discovered at runtime; do not guess tool names or schemas. Treat `execute_code` as arbitrary code execution, require explicit approval for all mutating tool calls, and never bundle TDMCP.tox. AI prompts use the owner-selected local Ollama provider unless the owner requests another provider.
+These rules apply to Claude, Codex, and any coding agent working in this repository.
 
-You are the lead software engineer responsible for completing and maintaining this desktop application (Windows and Mac).
-The owner does NOT write code. They use the app, find problems, report them and pitch ideas, in chat or as GitHub issues. Agents do everything else. Your job is to deliver a working application, not merely suggest improvements.
+## Mission
 
-## Project priorities
-1. Reliability and correct functionality.
-2. Preserve all existing working features.
-3. Integrate WiZ, GE Cync, and Hubspace consistently.
-4. Optimize performance, responsiveness, and resource usage.
-5. Deliver polished music-reactive lighting and synchronization.
-6. Maintain a production-ready Mac & Windows installer and portable build.
+Deliver working Lumen features and fixes. The owner uses the application and reports problems or ideas; agents do the engineering. Optimize for verified product progress, not project administration.
 
-## Engineering rules
-- Inspect existing implementations before modifying anything.
-- Work from the latest source in this repo (`git pull` first).
-- Never assume an integration works because its code exists.
-- Identify root causes before fixing symptoms.
-- Prefer targeted modifications over unnecessary rewrites.
-- Preserve existing APIs and compatibility.
-- Avoid unnecessary dependencies and duplicate implementations.
-- Handle errors, timeouts, disconnections, and recovery.
-- Never fabricate test results.
-- Never claim completion without verification.
+## Task-first execution
 
-## Development workflow
-1. Inspect relevant code.
-2. Identify the root cause and affected components.
-3. Implement the smallest complete solution.
-4. Test affected functionality and regressions.
-5. Update project documentation.
-6. Report completed work and remaining issues.
+1. Start from the task the owner actually assigned. Identify its concrete, testable outcome.
+2. Inspect only the files and call paths needed to understand and implement that task. Expand scope only when the implementation proves it necessary.
+3. Begin implementation promptly. Do not spend a session producing plans, audits, inventories, proposals, or status summaries instead of code.
+4. Make the smallest complete change that solves the root cause. Preserve existing APIs, saved-project compatibility, and working behavior.
+5. Run focused tests and relevant syntax/static checks. Run the full suite when the change is cross-cutting, before a release, or when targeted tests are insufficient.
+6. Fix failures caused by the change. Clearly distinguish failures that pre-date the change or are blocked by the environment.
+7. Finish with a concise factual handoff: changed files, behavior delivered, checks actually run, and any remaining blocker.
 
-## Efficiency
-- Avoid repeatedly analyzing unrelated files.
-- Combine related work into coherent tasks.
-- Keep explanations concise.
-- Make reasonable engineering decisions independently.
-- Ask questions only when genuinely blocked.
-- Never sacrifice correctness to save tokens.
+## Do not do administrative work by default
 
-## Documentation (in the repo root)
-Maintain: PROJECT.md, ARCHITECTURE.md, STATUS.md, TODO.md, KNOWN_ISSUES.md, CHANGELOG.md.
-Treat the latest source code as authoritative. Treat documentation as a record of verified project state, not proof that functionality works.
+- Do not read STATUS.md, TODO.md, KNOWN_ISSUES.md, or other project documents at the start of every session.
+- Do not create or update status logs, TODO lists, continuation/handoff documents, plans, architecture write-ups, changelogs, or other Markdown documentation unless the assigned task explicitly requires documentation or the owner asks for it.
+- Do not create task trackers, resume scripts, project-management systems, agent orchestration, or progress-reporting infrastructure unless explicitly requested.
+- Do not perform repository-wide audits, broad dependency inventories, web research, benchmark projects, or architecture reviews for a narrowly scoped implementation task.
+- Do not turn a feature request into a multi-stage roadmap. Do not invent follow-up work.
+- Do not repeatedly inspect the same files or run unrelated terminal/Git commands.
+- Do not claim work is complete based on analysis, planning, documentation, or source-presence checks alone.
 
-## Session start (every session, every agent)
-1. `git pull`.
-2. Read STATUS.md, TODO.md and KNOWN_ISSUES.md before doing anything else. STATUS.md starts with a session log: the newest entry says what the last agent (Claude or Codex) did and what is unfinished.
-3. Say in one line what you are continuing, then continue. Do not ask the owner to re-explain.
+Existing documentation remains available as reference material when it is directly relevant. It is not a mandatory session checklist and does not need to be synchronized after every code change.
 
-## After EVERY update that changes code, status, bugs or priorities
-1. Run `npm test` (and anything else relevant to the change).
-2. Read, then update the affected docs: STATUS, TODO, KNOWN_ISSUES, CHANGELOG, and ARCHITECTURE/PROJECT if structure changed. Mark things VERIFIED only with real test or log evidence (say what the evidence is). Add the new CHANGELOG entry. Edit the SAME files; never create copies.
-3. Add a dated entry at the top of the session log in STATUS.md: which agent you are, what changed, what is unfinished, what to do next.
-4. `git add -A && git commit`, then `git pull --rebase && git push` to `main`. Push even if work is half done (say so in STATUS.md). Never leave work only on this machine or in a chat. If you are about to run out of usage, do steps 2-4 first.
-5. If you can't push to `main` (e.g. Codex sandbox), push a branch and open a pull request, and tell the owner to merge it.
+## Research and dependencies
 
-## Builds (rebuilt automatically on every push to main)
-- GitHub Actions runs `npm test` on Windows, macOS and Linux, builds the Windows installer + portable exe and the Mac dmg + zip, and publishes both to the **latest** release: https://github.com/nr9552031-debug/lumen-1.82-pc/releases/tag/latest
-- If CI fails after your push, fix it first.
-- Versions are automatic: every build on main gets the next patch number (1.8.3, 1.8.4, ...), computed by `scripts/ci-version.js` from the run number. Do NOT edit the patch number by hand. To start a new minor/major (e.g. 1.9), set package.json `version` to `1.9.0` and `versionBuildOffset` to (current workflow run number - 1).
+Use existing project patterns first. Research external projects only when the task genuinely depends on an external API, protocol, library, asset, or implementation reference, or when the owner specifically asks for research. Keep research proportional to the task.
 
-## Commands
-`npm install`, `npm start`, `npm test` (must pass), `npm run dist` (Windows build), `npm run dist:mac` (Mac build, on a Mac). Layout: `src/main` (Electron main, providers), `src/renderer` (UI), `src/shared` (show/projection/audio), `test/`, `build/` (icons), `scripts/`. See ARCHITECTURE.md and README.md.
+Do not add dependencies unless they materially improve the requested implementation. Before importing third-party code or assets, verify compatibility and license obligations and preserve required attribution. Never copy code merely because it appears useful.
 
-## Windows and Mac rules
-- Every change must work on both. Never add OS-specific code without a `process.platform` check and a working path (or clear message) for the other OS. Use `path`/`os`, never hard-coded separators or Windows-only commands.
-- Secrets use Electron `safeStorage` (DPAPI on Windows, Keychain on Mac). Do not bypass it.
-- Known Mac gap: system-sound capture ("loopback" in `src/main/main.js`) is Windows-only; Mac falls back to the microphone.
-- Mac needs the Local Network permission for WiZ; keep the hint in `providers/wiz.js` accurate.
-- Say what was verified on each OS and what the owner still needs to try on a real machine.
+## Engineering and product constraints
 
-## Other rules
-- Cync, Hubspace and WiZ integrations are reverse-engineered. Never log passwords, emails or tokens.
-- Cync certificate pinning (see README) is deliberate. Do not weaken it.
-- Lights must return to their previous state when a show stops or the app closes.
-- Keep the existing plain HTML/CSS/JS style. No new dependencies without a reason in CHANGELOG.md.
-- GitHub issues are an optional inbox; treat them as tasks too. Reference them in commits (`Fixes #12`).
+- Inspect the relevant existing implementation before changing it; identify the root cause rather than treating symptoms.
+- Preserve compatibility across Windows and macOS. Use platform-aware APIs and paths; do not introduce an OS-specific dead end.
+- Keep the existing plain HTML/CSS/JavaScript/Electron architecture unless the task requires a justified change.
+- Handle errors, timeouts, disconnections, cleanup, and recovery for asynchronous/device operations.
+- WiZ, GE Cync, and Hubspace integrations are reverse-engineered. Never log passwords, emails, tokens, or other credentials.
+- Cync certificate pinning is deliberate; do not weaken it.
+- Store secrets with Electron safeStorage. Do not bypass it.
+- Lights must return to their previous state when a show stops or the app closes. Preserve retryable restoration behavior.
+- TouchDesigner Studio must discover official TDMCP tools and schemas at runtime. Treat execute_code as arbitrary code execution and require explicit approval for mutating calls. Never bundle TDMCP.tox.
+- AI prompts use the owner-selected local Ollama provider unless the owner requests another provider.
+- Never fabricate test results or claim real-hardware, GPU, visual, or cross-platform verification that was not performed.
+
+## Git workflow
+
+- Work on the task's current feature branch, or create a focused branch from the latest main when needed. Do not overwrite unrelated user changes.
+- Do not push directly to main. Commit the completed focused change on its branch and open a pull request when repository access permits.
+- Do not commit half-finished work merely to create an activity trail. If blocked, preserve the work on the branch and report the specific blocker.
+- Do not change version numbers manually; CI computes patch versions. Follow the existing release workflow for intentional minor/major version changes.
+- Do not alter CI, release, signing, or publishing configuration unless the task requires it.
+
+## Testing
+
+- Select tests that exercise the behavior changed, not merely the presence of source strings.
+- Run the narrowest useful test first. Expand only as needed.
+- If the full test suite is blocked by an environment-specific issue, report the exact command, failure, and which targeted checks passed.
+- For UI, WebGL, audio, device, and hardware-dependent behavior, distinguish automated checks from actual runtime/device verification.
+
+## Completion standard
+
+A task is complete when the requested behavior is implemented, relevant checks have passed, and known limitations are stated honestly. Product code and working behavior take priority over process artifacts.
