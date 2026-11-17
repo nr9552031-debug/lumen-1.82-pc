@@ -46,7 +46,7 @@ function createApi({ manager, store, fx, automation, diag, platform }) {
     'td:disconnect': () => platform.touchDesigner.disconnect(),
     'td:models': () => platform.touchDesigner.models(),
     'td:run': (prompt, model) => platform.touchDesigner.run(prompt, model),
-    'td:approve': (runId, approved) => platform.touchDesigner.approveTool(runId, approved),
+    'td:approve': (runId, approved, approveRoutine) => platform.touchDesigner.approveTool(runId, approved, approveRoutine),
     'td:stop': () => platform.touchDesigner.stopRun(),
     state: () => manager.snapshot(),
     scan: () => manager.scan(),
