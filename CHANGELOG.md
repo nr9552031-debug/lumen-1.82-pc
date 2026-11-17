@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased (2026-11-16)
+- TouchDesigner Studio: turn the generic tool chat into a clear animation-authoring flow; ask the local agent to build a playable scene, inspect previews, and disclose missing character assets. Add one-retry recovery for malformed Ollama tool calls and explicit incomplete-run status. Let the owner approve routine operator edits for the current animation run while retaining separate approval for code, deletion, save, export and file operations.
 - Add TouchDesigner Studio: connect through the official TDMCP Streamable HTTP MCP server with OAuth 2.1/PKCE, dynamically discover tools, and use local Ollama tool calling to inspect/build/iterate TouchDesigner networks. Gate all non-read-only tools behind per-call approval, flag Python execution/deletion as high risk, and support cancellation, logs, current project info and embedded output image preview. TDMCP remains user-installed and is not bundled due to its Shared Use License. Add the official MCP SDK and local policy/installation documentation.
 - Add a hardware-free TouchDesigner test for endpoint security, MCP initialization/tool discovery/invocation/disconnect, Ollama agent loop, and explicit write approval.
 - Add Technology Optimization foundation: read-only dependency inventory, manual GitHub search, saved proposals and explicit approval states. No dependency or existing feature changes. Periodic monitoring and security advisory checks remain planned.
