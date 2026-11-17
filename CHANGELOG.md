@@ -1,6 +1,10 @@
 # CHANGELOG
 
 ## Unreleased (2026-11-16)
+- Extend Projection Studio AI Pipeline with user-selected PNG upload and 16:9/mask-contrast validation before ComfyUI use; reject path-bearing filenames and restrict non-loopback HTTP.
+- Set package version to the owner-specified 1.8.19; existing CI offset 5 produces 1.8.20 for the next workflow run (currently run 25).
+- Projection Studio: add an AI Pipeline tab for importing ComfyUI API workflows, checking available node classes on the running server, queueing the exact imported graph, and checking execution history. Restrict plain HTTP to loopback and enforce the 10 MB JSON limit. No model-specific graph is fabricated.
+- TouchDesigner Studio: add a persistent ComfyUI + ComfyTD setup checklist and local ComfyUI API workflow JSON validator. The checker identifies API node count and common parameters, rejects editor-layout JSON, and caps input at 10 MB; it does not run graphs or verify installed models/custom nodes.
 - TouchDesigner Studio: turn the generic tool chat into a clear animation-authoring flow; ask the local agent to build a playable scene, inspect previews, and disclose missing character assets. Add one-retry recovery for malformed Ollama tool calls and explicit incomplete-run status. Let the owner approve routine operator edits for the current animation run while retaining separate approval for code, deletion, save, export and file operations.
 - Add TouchDesigner Studio: connect through the official TDMCP Streamable HTTP MCP server with OAuth 2.1/PKCE, dynamically discover tools, and use local Ollama tool calling to inspect/build/iterate TouchDesigner networks. Gate all non-read-only tools behind per-call approval, flag Python execution/deletion as high risk, and support cancellation, logs, current project info and embedded output image preview. TDMCP remains user-installed and is not bundled due to its Shared Use License. Add the official MCP SDK and local policy/installation documentation.
 - Add a hardware-free TouchDesigner test for endpoint security, MCP initialization/tool discovery/invocation/disconnect, Ollama agent loop, and explicit write approval.

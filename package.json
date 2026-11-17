@@ -1,7 +1,7 @@
 {
   "name": "lumen-lights",
   "productName": "Lumen",
-  "version": "1.8.2",
+  "version": "1.8.19",
   "description": "One dark-mode control center for WiZ, GE Cync and Hubspace smart lights",
   "main": "src/main/main.js",
   "author": "Lumen",

@@ -8,6 +8,7 @@ const Core = require('../shared/show-core');
 const { ProjLights } = require('./projlights');
 const { createShowApi } = require('./showapi');
 const { createTechnologyOptimization } = require('./technology-optimization');
+const Comfy = require('./comfyui');
 
 function createApi({ manager, store, fx, automation, diag, platform }) {
   const { wiz, hubspace, cync } = manager.providers;
@@ -40,8 +41,15 @@ function createApi({ manager, store, fx, automation, diag, platform }) {
   return {
     ...showApi,
     ...technologyOptimization,
+    'comfy:validate': (raw) => Comfy.parseWorkflow(raw),
+    'comfy:inspect': (url) => Comfy.inspect(url),
+    'comfy:check': (url, raw) => Comfy.validateAgainstServer(url, raw),
+    'comfy:upload-png': (url, filename, dataUrl) => Comfy.uploadPng(url, filename, dataUrl),
+    'comfy:queue': (url, raw) => Comfy.queueWorkflow(url, raw),
+    'comfy:history': (url, promptId) => Comfy.history(url, promptId),
     'td:status': () => platform.touchDesigner.snapshot(),
     'td:config': (patch) => platform.touchDesigner.saveConfig(patch),
+    'td:verify-comfy-json': (rawJson) => platform.touchDesigner.verifyComfyWorkflowJson(rawJson),
     'td:connect': () => platform.touchDesigner.connect(),
     'td:disconnect': () => platform.touchDesigner.disconnect(),
     'td:models': () => platform.touchDesigner.models(),
