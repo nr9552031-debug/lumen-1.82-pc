@@ -1,1 +1,1 @@
-Read and follow @AGENTS.md. It is the single source of truth shared with Codex and other agents.
+Read and follow @AGENTS.md. AGENTS.md is the shared source of truth for Claude, Codex, and other coding agents. Prioritize implementing the owner's assigned product task; do not add project-management or documentation work unless explicitly requested.
