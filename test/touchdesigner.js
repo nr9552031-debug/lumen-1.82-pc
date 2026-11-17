@@ -2,10 +2,34 @@
 const assert = require('assert');
 const http = require('http');
 const { randomUUID } = require('crypto');
-const { TouchDesigner, safeEndpoint, DEFAULT_TD_URL, toolName, toToolOutput } = require('../src/main/touchdesigner');
+const { TouchDesigner, safeEndpoint, DEFAULT_TD_URL, toolName, toToolOutput, COMFY_TD_WORKFLOW, verifyComfyWorkflowJson } = require('../src/main/touchdesigner');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { z } = require('zod');
+const Comfy = require('../src/main/comfyui');
+
+async function testComfyHttpLifecycle() {
+  const promptId = randomUUID(); let received = null;
+  const server = http.createServer(async (req, res) => {
+    if (req.url === '/object_info') return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ LoadImage: {}, SaveImage: {} }));
+    if (req.url === '/prompt') {
+      let body = ''; for await (const chunk of req) body += chunk; received = JSON.parse(body);
+      return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ prompt_id: promptId, node_errors: {} }));
+    }
+    if (req.url === `/history/${promptId}`) return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ [promptId]: { status: { completed: true }, outputs: { '2': { images: [{ filename: 'keyframe.png' }] } } } }));
+    res.writeHead(404).end();
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const url = `http://127.0.0.1:${server.address().port}`;
+    const workflow = JSON.stringify({ '1': { class_type: 'LoadImage', inputs: { image: 'base.png' } }, '2': { class_type: 'SaveImage', inputs: { images: ['1', 0], filename_prefix: 'keyframe' } } });
+    const queued = await Comfy.queueWorkflow(url, workflow);
+    assert.strictEqual(queued.promptId, promptId, 'queues graph and returns ComfyUI prompt ID');
+    assert.deepStrictEqual(received.prompt, JSON.parse(workflow), 'submits the imported graph unchanged');
+    assert.strictEqual((await Comfy.history(url, promptId)).outputs['2'].images[0].filename, 'keyframe.png', 'retrieves completed output metadata');
+    await assert.rejects(Comfy.queueWorkflow(url, JSON.stringify({ '4': { class_type: 'MissingNodePack', inputs: {} } })), /missing required node types/, 'reports missing custom node classes');
+  } finally { await new Promise((resolve) => server.close(resolve)); }
+}
 
 async function testStreamableHttpLifecycle() {
   const sessions = new Map();
@@ -42,6 +66,14 @@ async function testStreamableHttpLifecycle() {
 }
 
 async function main() {
+  const comfyApiWorkflow = JSON.stringify({ '1': { class_type: 'LoadImage', inputs: { image: 'base_photo.png' } }, '2': { class_type: 'SaveImage', inputs: { images: ['1', 0], filename_prefix: 'keyframe_01' } } });
+  assert.strictEqual(Comfy.parseWorkflow(comfyApiWorkflow).nodeCount, 2, 'parses ComfyUI API node graphs');
+  assert.throws(() => Comfy.parseWorkflow(JSON.stringify({ nodes: [], links: [] })), /Export \(API\)/, 'rejects editor graph format');
+  assert.throws(() => Comfy.parseWorkflow(JSON.stringify({ '1': { class_type: 'SaveImage', inputs: { images: ['9', 0] } } })), /references missing node/, 'rejects dangling API graph connections');
+  assert.throws(() => Comfy.parseWorkflow('x'.repeat(Comfy.MAX_WORKFLOW_BYTES + 1)), /10 MB/, 'bounds workflow parsing');
+  assert.throws(() => Comfy.safeComfyUrl('http://192.168.1.5:8188'), /localhost HTTP/, 'rejects insecure remote ComfyUI');
+  await assert.rejects(Comfy.uploadPng('http://127.0.0.1:8188', '../unsafe.png', 'data:image/png;base64,AA=='), /simple filename/, 'rejects unsafe upload filenames');
+  await testComfyHttpLifecycle();
   assert.strictEqual(safeEndpoint('').toString(), DEFAULT_TD_URL, 'uses the documented TDMCP IPv4 loopback default');
   assert.throws(() => safeEndpoint('http://192.168.1.4:13316/mcp'), /HTTPS/, 'refuses unauthenticated plain HTTP to remote hosts');
   assert.throws(() => safeEndpoint('http://user:pass@127.0.0.1/mcp'), /credentials/, 'refuses credentials embedded in endpoint URL');
@@ -49,8 +81,21 @@ async function main() {
   const output = toToolOutput({ content: [{ type: 'text', text: 'Project: demo' }, { type: 'image', mimeType: 'image/png', data: 'cG5n' }] });
   assert(output.text.includes('Project: demo') && output.images[0].data === 'cG5n', 'keeps text and image feedback from MCP results');
 
+  assert.strictEqual(COMFY_TD_WORKFLOW.length, 4, 'includes the four ComfyUI and ComfyTD setup steps');
+  const uiWorkflow = verifyComfyWorkflowJson(JSON.stringify({ nodes: [{ id: 1 }], links: [], extra: {} }));
+  assert.strictEqual(uiWorkflow.valid, false, 'rejects ComfyUI editor workflow JSON');
+  assert(/Export \(API\)/.test(uiWorkflow.error), 'explains the required API export');
+  const apiWorkflow = verifyComfyWorkflowJson(JSON.stringify({ '3': { class_type: 'KSampler', inputs: { seed: 1, denoise: 0.8 } } }));
+  assert.strictEqual(apiWorkflow.valid, true, 'accepts a ComfyUI API node object');
+  assert.deepStrictEqual(apiWorkflow.exposed[0].parameters, ['seed', 'denoise'], 'identifies commonly driven parameters');
+  assert.strictEqual(verifyComfyWorkflowJson('{').valid, false, 'rejects malformed JSON');
+
   const store = { data: { settings: {} }, save() {}, getSecret() { return undefined; }, setSecret() {} };
   const td = new TouchDesigner({ store, openExternal: async () => {} });
+  td.saveConfig({ comfySteps: { 'export-api': true, unknown: true } });
+  assert.strictEqual(td.snapshot().comfySteps['export-api'], true, 'persists workflow checklist progress');
+  assert.strictEqual(td.snapshot().comfySteps.unknown, undefined, 'ignores unknown checklist IDs');
+  assert.strictEqual(td.verifyComfyWorkflowJson('x'.repeat(10 * 1024 * 1024 + 1)).valid, false, 'rejects oversized workflow input');
   td.state = 'connected';
   td.tools = [
     { name: 'project_info', description: 'Inspect project', inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },

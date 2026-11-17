@@ -10,6 +10,7 @@ Electron app, plain HTML/CSS/JS renderer, no framework.
 - `src/shared/` pure logic: `show-*.js` (analysis/core/effects), `av-*.js` (audio-visual features/scheduling/director), `proj-*.js` (projection), `proj-quality.js` (saved render tiers, canvas sizing and frame-time fallback), `audio-service.js`, `color.js`.
 - `src/renderer/` UI: `index.html`, `app.js`, `core.js`, `shell.js`, `visualizer.js`, `projector.*`, `styles.css`.
 - `src/main/touchdesigner.js` TouchDesigner MCP Streamable HTTP/OAuth client and Ollama tool-calling loop; `src/renderer/touchdesigner.js` is the TouchDesigner Studio workspace. TDMCP tokens use `Store`/Electron safeStorage. Renderer access is through the existing main-window-only IPC API and preload event bridge.
+- `src/main/comfyui.js` validates ComfyUI API workflows, safely targets localhost or HTTPS servers, uploads user-selected PNG assets, checks installed node classes via `/object_info`, queues supplied graphs through `/prompt`, and reads `/history`. Projection Studio exposes this through the AI Pipeline tab and existing main-process API bridge. It does not synthesize model-specific graphs or install nodes/models.
 - `test/` tests using simulated WiZ bulbs (each bound to its own 127.0.0.x loopback address; macOS CI adds aliases).
 - `.github/workflows/` `test.yml` (Windows/macOS/Linux), `build.yml` (tests, builds PC + Mac, publishes the `latest` release).
 

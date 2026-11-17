@@ -33,6 +33,10 @@ The TDMCP component itself runs inside TouchDesigner and applies its own undo bl
 - The app has no dedicated TouchDesigner process detector. Connection status is determined by attempting MCP initialization and tool discovery.
 - Linux is not a supported Lumen installer target. The MCP service itself is platform independent; user verification is still required on Windows and macOS.
 
+## ComfyUI workflow guide
+
+Projection Studio's AI Pipeline tab accepts base-photo and surface-mask PNGs at 1280×720 or 1920×1080; the mask must be predominantly near-black/near-white and contain both classes. It uploads selected assets to the user's ComfyUI server, accepts an API workflow JSON, checks node classes against `/object_info`, queues it through `/prompt`, and retrieves `/history`. The default is local ComfyUI at `127.0.0.1:8188`; non-loopback plain HTTP is rejected. The imported workflow must reference the uploaded filenames and define its model-specific steps; Lumen does not synthesize model-specific graphs or install models/nodes. Automatic generated-output saving and TouchDesigner Multiply/Window/Stoner network construction are not implemented yet. TouchDesigner Studio also has a four-step ComfyTD checklist and structural API JSON checker. ComfyTD, Stoner, and Kantan Mapper remain user-installed.
+
 ## Open-source assessment for prompt-to-animation
 
 - **Ollama + Qwen3.5-4B** — retained as the owner's local agent. The Qwen model card lists Apache-2.0 and tool/vision capabilities. The current local model did return malformed tool-call XML once; Lumen now retries once and reports incomplete work, but a successful recovery still needs live verification. No larger model was downloaded.

@@ -192,7 +192,7 @@ function pjBar() {
     <span class="pj-modesel" role="group" aria-label="How the projection is driven">${[['manual', 'Manual', 'Animations run on their own'], ['reactive', 'Music reactive', 'The music performs every animation'], ['auto', 'Autonomous', 'Lumen directs the whole show to the music']].map(([k, n, d]) => `<button class="${pj.cur.mode === k ? 'on' : ''}" data-mode="${k}" data-tip="${d}">${n}</button>`).join('')}</span>
     <button class="btn pri pj-play" data-a="${pj.running ? 'stop' : 'play'}">${pj.running ? '■ Stop' : '▶ Play'}</button>`;
 }
-function pjTabs() { const t = $('#pjTabs'); if (t) t.innerHTML = [['visuals', 'Visuals'], ['auto', 'Autonomous'], ['mapping', 'Mapping'], ['lights', 'Lights'], ['audio', 'Audio']].map(([k, l]) => `<button class="${k === pj.tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join(''); }
+function pjTabs() { const t = $('#pjTabs'); if (t) t.innerHTML = [['visuals', 'Visuals'], ['ai', 'AI Pipeline'], ['auto', 'Autonomous'], ['mapping', 'Mapping'], ['lights', 'Lights'], ['audio', 'Audio']].map(([k, l]) => `<button class="${k === pj.tab ? 'on' : ''}" data-tab="${k}">${l}</button>`).join(''); }
 function pjStatus() {
   const el = $('#pjStatus'); if (!el) return;
   const mode = PJ.LIGHT_MODES.find((m) => m[0] === pj.cur.lights.mode)[1], sent = Object.keys(pj.sent || {}).filter((b) => pj.sent[b]).map((b) => `${BRANDS[b] || b} ${pj.sent[b]}`).join(', ');
@@ -205,6 +205,43 @@ function pjPanel() {
   const el = $('#pjPanel'); if (!el) return; const r = pjSel(), L = pj.cur.lights, A = pj.cur.audio;
   const none = '<div class="note"><span>Click a shape on the stage to work on it, or add one on the Mapping tab.</span></div>';
   if (pj.tab === 'auto') { el.innerHTML = pjAutoPanel(); pjAutoLive(); return; }
+  if (pj.tab === 'ai') {
+    pj.comfy = pj.comfy || { url: 'http://127.0.0.1:8188', raw: '', status: 'Import your ComfyUI API workflow to validate and queue it on the local server.' };
+    const C = pj.comfy;
+    el.innerHTML = `<div class="sect">ComfyUI workflow</div><p class="muted pj-p">Import your model-specific ComfyUI API graph. Lumen checks its node types against your running server, then queues that exact graph. Models and custom nodes are never guessed or installed.</p><div class="f"><label>ComfyUI server</label><input id="pjComfyUrl" type="url" value="${esc(C.url)}"></div><div class="f"><label>Base photo and surface mask (PNG, 1280×720 or 1920×1080)</label><div class="row pj-wrap"><input id="pjComfyPhoto" type="file" accept="image/png"><button class="btn" id="pjComfyUploadPhoto">Upload base photo</button><input id="pjComfyMask" type="file" accept="image/png"><button class="btn" id="pjComfyUploadMask">Upload surface mask</button></div><small class="muted">Photo: ${esc(C.photoName || 'not uploaded')} · Mask: ${esc(C.maskName || 'not uploaded')}</small></div><div class="f"><label>API workflow JSON</label><input id="pjComfyFile" type="file" accept=".json,application/json"><textarea id="pjComfyRaw" rows="8" maxlength="10485760" style="width:100%;resize:vertical;margin-top:6px" placeholder="Choose an API workflow JSON file">${esc(C.raw)}</textarea></div><div class="row pj-wrap"><button class="btn" id="pjComfyValidate">Validate against ComfyUI</button><button class="btn pri" id="pjComfyQueue">Queue workflow</button>${C.promptId ? '<button class="btn" id="pjComfyHistory">Check result</button>' : ''}</div><p class="muted pj-p">${esc(C.status)}</p>`;
+    const url = $('#pjComfyUrl', el), raw = $('#pjComfyRaw', el), file = $('#pjComfyFile', el);
+    url.onchange = () => { C.url = url.value; };
+    raw.oninput = () => { C.raw = raw.value; };
+    file.onchange = async () => { const f = file.files && file.files[0]; if (!f) return; if (f.size > 10 * 1024 * 1024) { C.status = 'Workflow exceeds the 10 MB limit.'; return pjPanel(); } C.raw = await f.text(); pjPanel(); };
+    const uploadAsset = (inputId, role) => async () => {
+      const f = $(`#${inputId}`, el).files && $(`#${inputId}`, el).files[0]; if (!f) { C.status = `Choose a ${role} PNG first.`; return pjPanel(); }
+      if (f.type !== 'image/png' || f.size > 10 * 1024 * 1024) { C.status = `${role} must be a PNG smaller than 10 MB.`; return pjPanel(); }
+      try {
+        const image = await createImageBitmap(f), allowed = (image.width === 1280 || image.width === 1920) && image.height * 16 === image.width * 9;
+        if (!allowed) throw new Error('Image must be exactly 1280×720 or 1920×1080.');
+        if (role === 'surface mask') {
+          const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 288;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true }); ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data; let binary = 0, white = 0, black = 0, samples = 0;
+          for (let i = 0; i < pixels.length; i += 16) { const v = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3; if (v <= 12) black++; else if (v >= 243) white++; else binary++; samples++; }
+          if (!white || !black || binary / samples > 0.05) throw new Error('Mask must contain both a white target and black background with at least 95% near-black/near-white pixels.');
+        }
+        image.close();
+        const dataUrl = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Could not read the selected PNG.')); reader.readAsDataURL(f); });
+        const result = await call('comfy:upload-png', C.url, f.name, dataUrl);
+        if (role === 'base photo') C.photoName = result.name; else C.maskName = result.name;
+        C.status = `${role} uploaded to ComfyUI as ${result.name}. Set the matching LoadImage input in your API graph.`;
+      } catch (e) { C.status = e.message; }
+      pjPanel();
+    };
+    $('#pjComfyUploadPhoto', el).onclick = uploadAsset('pjComfyPhoto', 'base photo');
+    $('#pjComfyUploadMask', el).onclick = uploadAsset('pjComfyMask', 'surface mask');
+    $('#pjComfyValidate', el).onclick = async () => { C.url = url.value; C.raw = raw.value; try { const check = await call('comfy:check', C.url, C.raw); C.status = check.missing.length ? `Missing custom node types: ${check.missing.join(', ')}` : `Ready: ${check.nodeCount} nodes; node types found. Queue: ${check.queue.running} running, ${check.queue.pending} pending.`; } catch (e) { C.status = e.message; } pjPanel(); };
+    $('#pjComfyQueue', el).onclick = async () => { C.url = url.value; C.raw = raw.value; try { const result = await call('comfy:queue', C.url, C.raw); C.promptId = result.promptId; C.status = `Queued ${result.nodeCount} nodes. Prompt ID: ${result.promptId}`; } catch (e) { C.status = e.message; } pjPanel(); };
+    const historyButton = $('#pjComfyHistory', el);
+    if (historyButton) historyButton.onclick = async () => { try { const result = await call('comfy:history', C.url, C.promptId); C.status = result ? `Execution status: ${JSON.stringify(result.status || {})}. Output nodes: ${Object.keys(result.outputs || {}).length}.` : 'Still queued or running.'; } catch (e) { C.status = e.message; } pjPanel(); };
+    return;
+  }
   if (pj.tab === 'visuals') {
     const paletteNames = { aurora: 'Aurora', ember: 'Ember', tide: 'Tide', dusk: 'Dusk', mono: 'Monochrome' };
     el.innerHTML = `<div class="sect">Animation${r ? ' for “' + esc(r.name) + '”' : ''}</div><div class="f"><label>Shared palette</label><select data-palette>${PJ.PALETTE_IDS.map((id) => `<option value="${id}" ${pj.cur.palette === id ? 'selected' : ''}>${paletteNames[id] || id}</option>`).join('')}</select></div>
